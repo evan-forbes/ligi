@@ -116,6 +116,21 @@ pub const COMMANDS = [_]CommandDef{
         \\Reports OK, BROKEN, or MISSING_ART for each entry.
         ,
     },
+    .{
+        .canonical = "template",
+        .names = &.{ "template", "t" },
+        .description = "Fill a template from TOML frontmatter",
+        .long_description =
+        \\Fill templates with interactive prompts.
+        \\
+        \\Subcommands:
+        \\  fill, f    Fill a template interactively
+        \\
+        \\Usage: ligi t f [path] [-c|--clipboard]
+        \\
+        \\If path is omitted, fzf is launched to select a template.
+        ,
+    },
 };
 
 /// Build the ligi command registry
@@ -149,6 +164,14 @@ const CheckParams = clap.parseParamsComptime(
     \\-h, --help         Show this help message
     \\-o, --output <str> Output format: text (default) or json
     \\-r, --root <str>   Limit scope to specific root
+    \\
+);
+
+/// Template command options
+const TemplateParams = clap.parseParamsComptime(
+    \\-h, --help         Show this help message
+    \\-c, --clipboard    Copy output to clipboard
+    \\<str>...
     \\
 );
 
@@ -230,6 +253,8 @@ pub fn run(
         return 1;
     } else if (std.mem.eql(u8, cmd.canonical, "check")) {
         return runCheckCommand(allocator, remaining_args, stdout, stderr);
+    } else if (std.mem.eql(u8, cmd.canonical, "template")) {
+        return runTemplateCommand(allocator, remaining_args, stdout, stderr);
     }
 
     try stderr.print("error: command '{s}' has no handler\n", .{cmd.canonical});
@@ -329,6 +354,86 @@ fn runCheckCommand(
     );
 }
 
+/// Run the template command with subcommand parsing
+fn runTemplateCommand(
+    allocator: std.mem.Allocator,
+    args: []const []const u8,
+    stdout: anytype,
+    stderr: anytype,
+) !u8 {
+    // Check for subcommand
+    if (args.len == 0) {
+        try stderr.writeAll("error: missing subcommand\n");
+        try stderr.writeAll("usage: ligi t <fill|f> [path] [-c|--clipboard]\n");
+        return 1;
+    }
+
+    const subcmd = args[0];
+    const subcmd_args = args[1..];
+
+    // Handle fill subcommand
+    if (std.mem.eql(u8, subcmd, "fill") or std.mem.eql(u8, subcmd, "f")) {
+        return runTemplateFillCommand(allocator, subcmd_args, stdout, stderr);
+    }
+
+    // Handle --help at template level
+    if (std.mem.eql(u8, subcmd, "--help") or std.mem.eql(u8, subcmd, "-h")) {
+        const registry = buildRegistry();
+        if (registry.findCommand("template")) |cmd| {
+            try registry.printCommandHelp(cmd, stdout);
+        }
+        return 0;
+    }
+
+    try stderr.print("error: unknown subcommand '{s}'\n", .{subcmd});
+    try stderr.writeAll("usage: ligi t <fill|f> [path] [-c|--clipboard]\n");
+    return 1;
+}
+
+/// Run the template fill subcommand
+fn runTemplateFillCommand(
+    allocator: std.mem.Allocator,
+    args: []const []const u8,
+    stdout: anytype,
+    stderr: anytype,
+) !u8 {
+    var diag: clap.Diagnostic = .{};
+    var iter = clap.args.SliceIterator{ .args = args };
+
+    var res = clap.parseEx(clap.Help, &TemplateParams, clap.parsers.default, &iter, .{
+        .diagnostic = &diag,
+        .allocator = allocator,
+    }) catch |err| {
+        try diag.report(stderr, err);
+        return 1;
+    };
+    defer res.deinit();
+
+    // Handle --help for fill
+    if (res.args.help != 0) {
+        try stdout.writeAll("Usage: ligi t f [path] [-c|--clipboard]\n\n");
+        try stdout.writeAll("Fill a template interactively.\n\n");
+        try stdout.writeAll("Arguments:\n");
+        try stdout.writeAll("  [path]         Path to template file (launches fzf if omitted)\n\n");
+        try stdout.writeAll("Options:\n");
+        try stdout.writeAll("  -c, --clipboard  Copy output to clipboard\n");
+        try stdout.writeAll("  -h, --help       Show this help\n");
+        return 0;
+    }
+
+    const template_cmd = @import("commands/template.zig");
+    const positionals = res.positionals[0];
+    const path: ?[]const u8 = if (positionals.len > 0) positionals[0] else null;
+
+    return template_cmd.runFill(
+        allocator,
+        path,
+        res.args.clipboard != 0,
+        stdout,
+        stderr,
+    );
+}
+
 // ============================================================================
 // Tests
 // ============================================================================
@@ -398,4 +503,9 @@ test "InitParams are valid" {
 test "CheckParams are valid" {
     // Verify check params compile correctly
     _ = CheckParams;
+}
+
+test "TemplateParams are valid" {
+    // Verify template params compile correctly
+    _ = TemplateParams;
 }

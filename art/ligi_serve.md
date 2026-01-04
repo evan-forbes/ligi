@@ -13,6 +13,7 @@ This plan defines how `ligi serve` will run a local HTTP server that lets a brow
 - Render Mermaid code fences as diagrams client-side.
 - Avoid external network dependencies by embedding front-end assets.
 - Keep the server minimal: one process, no database, no watchers required.
+- **Operational Model:** The server runs as a blocking foreground process. It stops when the user sends an interrupt signal (e.g., `Ctrl+C`).
 
 Non-goals (for now): live reload, auth, multi-user, remote hosting.
 
@@ -98,7 +99,9 @@ Suggested JS flow (high-level):
 - Only allow relative paths under the base root.
 - Reject any path containing `..`, drive letters, or absolute path prefixes.
 - Normalize path segments and ensure final resolved path starts with the base root directory.
-- Only serve files with `.md` or `.markdown` extensions.
+- Only serve files with allowed extensions to prevent leaking non-content files.
+  - Allow: `.md`, `.markdown`
+  - Allow Images: `.png`, `.jpg`, `.jpeg`, `.gif`, `.svg`, `.webp`
 
 ### Directory Listing
 
@@ -113,6 +116,12 @@ Suggested JS flow (high-level):
 - `/` and html -> `text/html; charset=utf-8`
 - `/api/list` -> `application/json`
 - `/api/file` -> `text/plain; charset=utf-8`
+- Images:
+  - `.png` -> `image/png`
+  - `.jpg`, `.jpeg` -> `image/jpeg`
+  - `.gif` -> `image/gif`
+  - `.svg` -> `image/svg+xml`
+  - `.webp` -> `image/webp`
 
 ### Error Handling
 
@@ -126,6 +135,8 @@ Suggested JS flow (high-level):
 ## Front-End Assets (Self-Contained)
 
 - Bundle minified vendor assets under `src/serve/assets/vendor/`.
+  - **Action:** Download specific versions manually (e.g., from cdnjs or npm) and commit them to the repo.
+  - Recommended: `markdown-it` (v14+), `markdown-it-gfm`, and `mermaid` (v10+).
 - Use `@embedFile` in `src/serve/assets.zig` to embed assets into the binary.
 - Ensure licenses are preserved in a `src/serve/assets/vendor/NOTICE.md` if required.
 - Avoid CDN dependencies to keep offline behavior consistent.
@@ -163,6 +174,16 @@ Suggested JS flow (high-level):
   - Fetch `/` and assert `200` and HTML marker.
   - Fetch `/api/list` and validate JSON.
   - Fetch `/api/file?path=...` and verify content.
+
+## Technical Considerations
+
+### Zig Standard Library
+- Use `std.http.Server` (or `std.net.TcpListener` with manual HTTP parsing if `std.http.Server` is too unstable/complex for this use case, but `std.http` is preferred) for the web server implementation.
+- If `--open` is used, spawn the browser process using `std.ChildProcess` in a non-blocking/detached manner so the server continues running.
+
+### JSON Serialization
+- Use `std.json.stringify` to generate the JSON response for `/api/list`.
+- Use an `ArenaAllocator` to manage memory for the file list construction and serialization, freeing it all at the end of the request handling.
 
 ---
 
