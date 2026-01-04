@@ -4,6 +4,7 @@ pub const errors = @import("errors.zig");
 pub const paths = @import("paths.zig");
 pub const fs = @import("fs.zig");
 pub const config = @import("config.zig");
+pub const global_index = @import("global_index.zig");
 
 // Re-export commonly used types
 pub const ErrorCategory = errors.ErrorCategory;
@@ -13,3 +14,4 @@ pub const Result = errors.Result;
 
 pub const LigiConfig = config.LigiConfig;
 pub const SPECIAL_DIRS = paths.SPECIAL_DIRS;
+pub const GlobalIndex = global_index.GlobalIndex;

@@ -1,0 +1,16 @@
+# Ligi Configuration
+# See https://github.com/evan-forbes/ligi for documentation
+
+version = "0.1.0"
+
+[index]
+# Patterns to ignore when indexing (glob syntax)
+ignore_patterns = ["*.tmp", "*.bak"]
+# Whether to follow symbolic links
+follow_symlinks = false
+
+[query]
+# Default output format: "text" or "json"
+default_format = "text"
+# Enable colored output
+colors = true

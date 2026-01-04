@@ -5,6 +5,7 @@ const core = @import("../../core/mod.zig");
 const paths = core.paths;
 const fs = core.fs;
 const config = core.config;
+const global_index = core.global_index;
 
 /// Initial content for ligi_tags.md
 pub const INITIAL_TAGS_INDEX =
@@ -132,6 +133,19 @@ pub fn run(
     const config_path = try paths.joinPath(allocator, &.{ config_dir, "ligi.toml" });
     defer allocator.free(config_path);
     try createFileTracked(allocator, config_path, config.DEFAULT_CONFIG_TOML, &result);
+
+    // Register repo in global index (only for local init, not --global)
+    if (!global) {
+        switch (global_index.registerRepo(allocator, base_path)) {
+            .ok => {},
+            .err => |e| {
+                // Non-fatal: warn but continue
+                try stderr.writeAll("warning: failed to register repo in global index: ");
+                try e.context.format("", .{}, stderr);
+                try stderr.writeAll("\n");
+            },
+        }
+    }
 
     // Print summary if not quiet
     if (!quiet) {

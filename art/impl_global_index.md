@@ -2,7 +2,7 @@
 
 ## Executive Summary
 
-This document defines the global index that lives under `~/.ligi/art/` and serves as a registry of every repo (and its `art/` root) that has been initialized with `ligi`. It enables quick discovery, cross-repo navigation, and future features like global tag/query without scanning every repo.
+This document defines the global index that lives under `~/.ligi/art/` and records only one datum per entry: the absolute path to a repo root that has been initialized with `ligi`. All structure is implied (`<repo>/art/...`). The global index must support fast existence checks and integrity validation via `ligi check`.
 
 ---
 
@@ -11,11 +11,11 @@ This document defines the global index that lives under `~/.ligi/art/` and serve
 | # | Decision | Choice |
 |---|----------|--------|
 | 1 | Global index file name | `~/.ligi/art/index/ligi_global_index.md` |
-| 2 | Format | Human-editable Markdown with stable, parseable sections |
-| 3 | Repo identity key | Absolute repo root path (canonicalized) |
-| 4 | Repo entry storage | Inline entries in the global index + optional per-repo index files |
-| 5 | Update triggers | `ligi init`, `ligi index`, and explicit `ligi global-index` (future) |
-| 6 | Idempotency | Merge/update existing entries; never duplicate |
+| 2 | Data model | One entry = absolute repo root path |
+| 3 | Format | Plain Markdown list (no quasi-YAML) |
+| 4 | Update trigger | Always on `ligi init` (local) |
+| 5 | Integrity check | `ligi check` validates entries and reports broken paths |
+| 6 | Idempotency | No duplicates; update in-place |
 
 ---
 
@@ -30,13 +30,9 @@ This document defines the global index that lives under `~/.ligi/art/` and serve
         └── ligi_global_index.md
 ```
 
-### 2.2 Markdown Format (Stable Sections)
+### 2.2 Markdown Format
 
-The file is divided into:
-
-1. **Header** (static) with doc purpose
-2. **Repo Registry** (machine-parseable list)
-3. **Notes** (optional freeform section)
+Only absolute repo roots are stored. All other paths are derived.
 
 ```md
 # Ligi Global Index
@@ -45,97 +41,95 @@ This file is auto-maintained by ligi. It tracks all repositories initialized wit
 
 ## Repositories
 
-- repo: /abs/path/to/repo
-  name: repo
-  art: /abs/path/to/repo/art
-  config: /abs/path/to/repo/art/config/ligi.toml
-  index: /abs/path/to/repo/art/index/ligi_tags.md
-  last_indexed: 2026-01-04T20:15:00Z
-  status: ok
-
-- repo: /abs/path/to/other
-  name: other
-  art: /abs/path/to/other/art
-  config: /abs/path/to/other/art/config/ligi.toml
-  index: /abs/path/to/other/art/index/ligi_tags.md
-  last_indexed: unknown
-  status: missing_art
+- /abs/path/to/repo
+- /abs/path/to/other
 
 ## Notes
 
 (Freeform, not parsed by ligi)
 ```
 
-### 2.3 Field Definitions
-
-- `repo`: Canonical absolute path to the repo root (primary key).
-- `name`: Basename of repo directory (display only; not unique).
-- `art`: Absolute path to the repo’s `art/` directory.
-- `config`: Absolute path to `ligi.toml` (local config).
-- `index`: Absolute path to `art/index/ligi_tags.md`.
-- `last_indexed`: RFC3339 UTC timestamp or `unknown`.
-- `status`: One of:
-  - `ok` (art + config present)
-  - `missing_art`
-  - `missing_config`
-  - `missing_index`
-  - `unknown`
-
 ---
 
 ## Part 3: Update Rules
 
-### 3.1 When `ligi init` runs
+### 3.1 When `ligi init` runs in a repo
 
 - Resolve repo root (default `.` or `--root`).
-- Canonicalize path (resolve `.`/`..`, symlinks if possible).
-- Ensure `~/.ligi/art/index/ligi_global_index.md` exists (create if missing).
-- Upsert an entry:
-  - If `repo` path matches an existing entry, update fields.
-  - If not found, append a new entry under “## Repositories”.
+- Canonicalize the path: resolve `.`/`..` and follow symlinks to their real path. If a symlink is dangling, use the literal path and let `ligi check` catch it later.
+- Ensure `~/.ligi/art/index/` directory and `ligi_global_index.md` file exist (create if missing).
+- Upsert the repo root path in the list:
+  - If present, leave as-is.
+  - If missing, append under “## Repositories”.
 
-### 3.2 When `ligi index` runs
+### 3.2 When `ligi init --global` runs
 
-- Update `last_indexed` for the repo.
-- Optionally update `status` based on filesystem checks.
-
-### 3.3 When repo is removed
-
-- Do **not** delete entries automatically.
-- Mark `status` as `missing_art` or `missing_config` on the next update.
+- Ensure `~/.ligi/art/index/` directory and `ligi_global_index.md` file exist (create if missing).
+- No repo entry is added because no local repo root is provided.
 
 ---
 
-## Part 4: Parsing Strategy
+## Part 4: Integrity Checks (`ligi check`)
 
-Parsing should be line-based and tolerant:
-- Identify “## Repositories” section.
-- Entries begin with `- repo: `.
-- All indented `key: value` lines that follow belong to that entry until the next `- repo:` or section header.
-- Unknown keys are preserved.
+`ligi check` validates global index entries and all local markdown links by default. Its goal is that if it reports no broken links, then every link resolves to an existing document.
 
-This avoids strict YAML parsing and keeps the file human-editable.
+Default behavior:
+- Validate every repo listed in the global index.
+- For each repo, scan all markdown files under `<repo>/art/`.
+- For each standard Markdown link (`[text](target)`), verify the target exists.
+- For each tag (`[[t/tag_name]]`), verify the tag exists in:
+  - The local tag index: `<repo>/art/index/ligi_tags.md`
+  - The global tag index: `~/.ligi/art/index/ligi_tags.md`
+
+Tag notes:
+- Tags are the only supported wiki-style link syntax.
+- Non-tag wiki links remain out of scope to preserve Markdown compatibility.
+
+Output:
+- Pretty-printed report grouped by status:
+  - **OK**: path exists + `art/` exists
+  - **BROKEN**: repo path missing
+  - **MISSING_ART**: repo exists but `art/` missing
+
+Example output:
+```
+OK:          /home/evan/projects/ligi
+OK:          /home/evan/projects/other
+MISSING_ART: /home/evan/old/legacy-project
+BROKEN:      /home/evan/deleted/gone
+```
+
+Flags:
+- `-o` / `--output json` emits machine-readable output (use this instead of `--json`).
+- `-r` / `--root` limits scope to a specific root. Defaults to `*` (all known repos). Use `-r ~/.ligi` to check only the global index file.
 
 ---
 
-## Part 5: Implementation Sketch (Zig)
+## Part 5: Parsing Strategy
 
-1. **Ensure file exists**: `~/.ligi/art/index/ligi_global_index.md`.
-2. **Read file** into memory.
-3. **Parse entries** into a map keyed by `repo` path.
-4. **Upsert entry** for the current repo.
-5. **Render file** back out with stable ordering:
+Parsing is line-based and minimal:
+- Find “## Repositories”.
+- Read all list items (`- ` prefix) until next header.
+- Trim whitespace; ignore empty lines.
+- Preserve any unknown sections and `## Notes` verbatim.
+
+---
+
+## Part 6: Implementation Sketch (Zig)
+
+1. Ensure the global index file exists.
+2. Read file contents.
+3. Parse list items into a set of paths.
+4. Add the current repo root if missing.
+5. Render file:
    - Header
-   - “## Repositories”
-   - Entries sorted lexicographically by `repo`
-   - “## Notes” (preserve existing block if present)
+   - "## Repositories"
+   - Sorted list of absolute paths (lexicographic, ascending)
+   - Preserve existing "## Notes" block if present
 
 ---
 
-## Part 6: Future Extensions (Non-blocking)
+## Part 7: Future Extensions (Non-blocking)
 
-- Per-repo detail files in global index:
-  - `~/.ligi/art/index/repo_<slug>.md` with backlinks and repo summary.
-- Global tag summary aggregation across repos.
-- `ligi global-index --prune` to remove stale entries.
-
+- `ligi check --prune` removes broken paths from the global index.
+- `ligi list` (or `ligi repos`) prints all known repos from the global index without validation.

@@ -160,4 +160,13 @@ pub fn build(b: *std.Build) void {
     //
     // Lastly, the Zig build system is relatively simple and self-contained,
     // and reading its source code will allow you to master it.
+
+    // Install to ~/.local/bin (similar to `go install`)
+    const install_local_step = b.step("install-local", "Install to ~/.local/bin");
+    const install_local = b.addSystemCommand(&.{
+        "sh", "-c", "mkdir -p \"$HOME/.local/bin\" && cp \"$1\" \"$HOME/.local/bin/ligi\"",
+        "--",
+    });
+    install_local.addArtifactArg(exe);
+    install_local_step.dependOn(&install_local.step);
 }

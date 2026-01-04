@@ -105,6 +105,17 @@ pub const COMMANDS = [_]CommandDef{
         .names = &.{ "archive", "a" },
         .description = "Move document to archive",
     },
+    .{
+        .canonical = "check",
+        .names = &.{"check"},
+        .description = "Validate global index and markdown links",
+        .long_description =
+        \\Validate global index entries and markdown links.
+        \\
+        \\Checks that all registered repos exist and have valid art/ directories.
+        \\Reports OK, BROKEN, or MISSING_ART for each entry.
+        ,
+    },
 };
 
 /// Build the ligi command registry
@@ -130,6 +141,14 @@ const InitParams = clap.parseParamsComptime(
     \\-g, --global       Initialize global ~/.ligi instead of local ./art
     \\-r, --root <str>   Override target directory
     \\-q, --quiet        Suppress non-error output
+    \\
+);
+
+/// Check command options
+const CheckParams = clap.parseParamsComptime(
+    \\-h, --help         Show this help message
+    \\-o, --output <str> Output format: text (default) or json
+    \\-r, --root <str>   Limit scope to specific root
     \\
 );
 
@@ -209,6 +228,8 @@ pub fn run(
     } else if (std.mem.eql(u8, cmd.canonical, "archive")) {
         try stderr.writeAll("error: 'archive' command not yet implemented\n");
         return 1;
+    } else if (std.mem.eql(u8, cmd.canonical, "check")) {
+        return runCheckCommand(allocator, remaining_args, stdout, stderr);
     }
 
     try stderr.print("error: command '{s}' has no handler\n", .{cmd.canonical});
@@ -257,6 +278,57 @@ fn runInitCommand(
     );
 }
 
+/// Run the check command with clap parsing
+fn runCheckCommand(
+    allocator: std.mem.Allocator,
+    args: []const []const u8,
+    stdout: anytype,
+    stderr: anytype,
+) !u8 {
+    var diag: clap.Diagnostic = .{};
+    var iter = clap.args.SliceIterator{ .args = args };
+
+    var res = clap.parseEx(clap.Help, &CheckParams, clap.parsers.default, &iter, .{
+        .diagnostic = &diag,
+        .allocator = allocator,
+    }) catch |err| {
+        try diag.report(stderr, err);
+        return 1;
+    };
+    defer res.deinit();
+
+    // Handle --help for check
+    if (res.args.help != 0) {
+        const registry = buildRegistry();
+        if (registry.findCommand("check")) |cmd| {
+            try registry.printCommandHelp(cmd, stdout);
+        }
+        return 0;
+    }
+
+    const check_cmd = @import("commands/check.zig");
+
+    // Parse output format
+    const output_format: check_cmd.OutputFormat = if (res.args.output) |fmt| blk: {
+        if (std.mem.eql(u8, fmt, "json")) {
+            break :blk .json;
+        } else if (std.mem.eql(u8, fmt, "text")) {
+            break :blk .text;
+        } else {
+            try stderr.print("error: invalid output format '{s}', expected 'text' or 'json'\n", .{fmt});
+            return 1;
+        }
+    } else .text;
+
+    return check_cmd.run(
+        allocator,
+        output_format,
+        res.args.root,
+        stdout,
+        stderr,
+    );
+}
+
 // ============================================================================
 // Tests
 // ============================================================================
@@ -294,6 +366,7 @@ test "printHelp includes all commands" {
     try std.testing.expect(std.mem.indexOf(u8, output, "index") != null);
     try std.testing.expect(std.mem.indexOf(u8, output, "query") != null);
     try std.testing.expect(std.mem.indexOf(u8, output, "archive") != null);
+    try std.testing.expect(std.mem.indexOf(u8, output, "check") != null);
 }
 
 test "printHelp shows aliases" {
@@ -320,4 +393,9 @@ test "GlobalParams are valid" {
 test "InitParams are valid" {
     // Verify init params compile correctly
     _ = InitParams;
+}
+
+test "CheckParams are valid" {
+    // Verify check params compile correctly
+    _ = CheckParams;
 }
