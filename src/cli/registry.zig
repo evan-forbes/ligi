@@ -117,6 +117,19 @@ pub const COMMANDS = [_]CommandDef{
         ,
     },
     .{
+        .canonical = "backup",
+        .names = &.{"backup"},
+        .description = "Backup global ~/.ligi repo or install cron job",
+        .long_description =
+        \\Backup the global ~/.ligi git repo, or install a cron job.
+        \\
+        \\Usage:
+        \\  ligi backup              Run backup now
+        \\  ligi backup --install    Install cron job (default schedule 0 3 * * *)
+        \\  ligi backup --install --schedule "0 */6 * * *"
+        ,
+    },
+    .{
         .canonical = "template",
         .names = &.{ "template", "t" },
         .description = "Fill a template from TOML frontmatter",
@@ -172,6 +185,15 @@ const TemplateParams = clap.parseParamsComptime(
     \\-h, --help         Show this help message
     \\-c, --clipboard    Copy output to clipboard
     \\<str>...
+    \\
+);
+
+/// Backup command options
+const BackupParams = clap.parseParamsComptime(
+    \\-h, --help            Show this help message
+    \\-i, --install         Install cron job for global backup
+    \\-s, --schedule <str>  Cron schedule (default: "0 3 * * *")
+    \\-q, --quiet           Suppress non-error output
     \\
 );
 
@@ -253,6 +275,8 @@ pub fn run(
         return 1;
     } else if (std.mem.eql(u8, cmd.canonical, "check")) {
         return runCheckCommand(allocator, remaining_args, stdout, stderr);
+    } else if (std.mem.eql(u8, cmd.canonical, "backup")) {
+        return runBackupCommand(allocator, remaining_args, global_args.quiet != 0, stdout, stderr);
     } else if (std.mem.eql(u8, cmd.canonical, "template")) {
         return runTemplateCommand(allocator, remaining_args, stdout, stderr);
     }
@@ -390,6 +414,47 @@ fn runTemplateCommand(
     return 1;
 }
 
+/// Run the backup command with clap parsing
+fn runBackupCommand(
+    allocator: std.mem.Allocator,
+    args: []const []const u8,
+    global_quiet: bool,
+    stdout: anytype,
+    stderr: anytype,
+) !u8 {
+    var diag: clap.Diagnostic = .{};
+    var iter = clap.args.SliceIterator{ .args = args };
+
+    var res = clap.parseEx(clap.Help, &BackupParams, clap.parsers.default, &iter, .{
+        .diagnostic = &diag,
+        .allocator = allocator,
+    }) catch |err| {
+        try diag.report(stderr, err);
+        return 1;
+    };
+    defer res.deinit();
+
+    if (res.args.help != 0) {
+        const registry = buildRegistry();
+        if (registry.findCommand("backup")) |cmd| {
+            try registry.printCommandHelp(cmd, stdout);
+        }
+        return 0;
+    }
+
+    const backup_cmd = @import("commands/backup.zig");
+    const quiet = (res.args.quiet != 0) or global_quiet;
+
+    return backup_cmd.run(
+        allocator,
+        res.args.install != 0,
+        res.args.schedule,
+        quiet,
+        stdout,
+        stderr,
+    );
+}
+
 /// Run the template fill subcommand
 fn runTemplateFillCommand(
     allocator: std.mem.Allocator,
@@ -472,6 +537,7 @@ test "printHelp includes all commands" {
     try std.testing.expect(std.mem.indexOf(u8, output, "query") != null);
     try std.testing.expect(std.mem.indexOf(u8, output, "archive") != null);
     try std.testing.expect(std.mem.indexOf(u8, output, "check") != null);
+    try std.testing.expect(std.mem.indexOf(u8, output, "backup") != null);
 }
 
 test "printHelp shows aliases" {
@@ -508,4 +574,9 @@ test "CheckParams are valid" {
 test "TemplateParams are valid" {
     // Verify template params compile correctly
     _ = TemplateParams;
+}
+
+test "BackupParams are valid" {
+    // Verify backup params compile correctly
+    _ = BackupParams;
 }

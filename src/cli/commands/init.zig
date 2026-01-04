@@ -19,6 +19,39 @@ pub const INITIAL_TAGS_INDEX =
     \\
 ;
 
+/// Initial content for art/README.md
+pub const INITIAL_ART_README =
+    \\# art/ (Ligi artifacts)
+    \\
+    \\This directory is created by `ligi init` for each repo and for the global
+    \\`~/.ligi` store. It is the project's human/LLM artifact system.
+    \\
+    \\Contents:
+    \\- `index/`    auto-maintained link + tag indexes
+    \\- `template/` prompt/report templates
+    \\- `config/`   Ligi config (e.g., `ligi.toml`)
+    \\- `archive/`  soft-delete area for retired docs
+    \\
+    \\Please treat `art/` as durable project context. Avoid deleting or moving files
+    \\here unless explicitly requested; prefer `archive/` for cleanup. See
+    \\`art/founding_idea.md` for design intent.
+    \\
+;
+
+/// Initial content for AGENTS.md
+pub const INITIAL_AGENTS =
+    \\# Ligi Agent Notes
+    \\
+    \\The `art/` directory is the repository's Ligi artifact store, initialized by
+    \\`ligi init`. It contains human/LLM notes, indexes, templates, config, and
+    \\archive data that are part of the project's durable context.
+    \\
+    \\Do not delete or move files under `art/` unless explicitly requested. If
+    \\something should be retired, use `art/archive/` or the future `ligi archive`
+    \\command instead. See `art/founding_idea.md` for the intended purpose.
+    \\
+;
+
 /// Result of init operation for reporting
 pub const InitResult = struct {
     created_dirs: std.ArrayList([]const u8) = .empty,
@@ -106,7 +139,17 @@ pub fn run(
     defer allocator.free(tags_path);
     try createFileTracked(allocator, tags_path, INITIAL_TAGS_INDEX, &result);
 
-    // 2. Config file
+    // 2. Art README in art/README.md
+    const art_readme_path = try paths.joinPath(allocator, &.{ art_path, "README.md" });
+    defer allocator.free(art_readme_path);
+    try createFileTracked(allocator, art_readme_path, INITIAL_ART_README, &result);
+
+    // 3. AGENTS.md in base path
+    const agents_path = try paths.joinPath(allocator, &.{ base_path, "AGENTS.md" });
+    defer allocator.free(agents_path);
+    try createFileTracked(allocator, agents_path, INITIAL_AGENTS, &result);
+
+    // 4. Config file
     var config_dir: []const u8 = undefined;
     var config_dir_allocated = false;
     defer if (config_dir_allocated) allocator.free(config_dir);
@@ -208,6 +251,14 @@ test "INITIAL_TAGS_INDEX contains expected header" {
 
 test "INITIAL_TAGS_INDEX contains Tags section" {
     try std.testing.expect(std.mem.indexOf(u8, INITIAL_TAGS_INDEX, "## Tags") != null);
+}
+
+test "INITIAL_ART_README contains header" {
+    try std.testing.expect(std.mem.indexOf(u8, INITIAL_ART_README, "# art/ (Ligi artifacts)") != null);
+}
+
+test "INITIAL_AGENTS contains header" {
+    try std.testing.expect(std.mem.indexOf(u8, INITIAL_AGENTS, "# Ligi Agent Notes") != null);
 }
 
 test "InitResult init and deinit work correctly" {

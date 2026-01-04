@@ -255,7 +255,8 @@ test_help() {
     assert_contains "$output" "Usage:" && \
     assert_contains "$output" "Commands:" && \
     assert_contains "$output" "init" && \
-    assert_contains "$output" "check"
+    assert_contains "$output" "check" && \
+    assert_contains "$output" "backup"
 }
 
 test_help_short() {
@@ -287,6 +288,8 @@ test_init_local() {
     assert_dir_exists "$test_dir/art/config" && \
     assert_dir_exists "$test_dir/art/template" && \
     assert_dir_exists "$test_dir/art/archive" && \
+    assert_file_exists "$test_dir/art/README.md" && \
+    assert_file_exists "$test_dir/AGENTS.md" && \
     assert_file_exists "$test_dir/art/index/ligi_tags.md" && \
     assert_file_exists "$test_dir/art/config/ligi.toml"
 }

@@ -6,3 +6,4 @@ pub const query = @import("query.zig");
 pub const archive = @import("archive.zig");
 pub const check = @import("check.zig");
 pub const template = @import("template.zig");
+pub const backup = @import("backup.zig");

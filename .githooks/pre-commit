@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [[ "${LIGI_ALLOW_ART_DELETE:-}" == "1" ]]; then
+    exit 0
+fi
+
+deleted_paths=$(git diff --cached --name-status --diff-filter=D | awk '$2 ~ /^art\\// { print $2 }')
+if [[ -n "$deleted_paths" ]]; then
+    echo "error: deletion under art/ is blocked to protect Ligi artifacts." >&2
+    echo "       Use art/archive/ or set LIGI_ALLOW_ART_DELETE=1 to override." >&2
+    echo "" >&2
+    echo "Deleted paths:" >&2
+    echo "$deleted_paths" >&2
+    exit 1
+fi
