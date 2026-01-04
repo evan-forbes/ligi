@@ -1,0 +1,323 @@
+//! CommandRegistry: Command routing using zig-clap for argument parsing.
+
+const std = @import("std");
+const clap = @import("clap");
+const core = @import("../core/mod.zig");
+
+/// Version string for ligi
+pub const VERSION = "0.1.0";
+
+/// Command definition with metadata
+pub const CommandDef = struct {
+    /// Canonical name (used in help, documentation)
+    canonical: []const u8,
+    /// All names that invoke this command (including canonical)
+    names: []const []const u8,
+    /// Short description for help listing
+    description: []const u8,
+    /// Long description for command-specific help
+    long_description: ?[]const u8 = null,
+};
+
+/// Registry of all commands
+pub const CommandRegistry = struct {
+    commands: []const CommandDef,
+    version: []const u8,
+
+    const Self = @This();
+
+    /// Find command by any of its names (canonical or alias)
+    pub fn findCommand(self: Self, name: []const u8) ?*const CommandDef {
+        for (self.commands) |*cmd| {
+            for (cmd.names) |cmd_name| {
+                if (std.mem.eql(u8, name, cmd_name)) {
+                    return cmd;
+                }
+            }
+        }
+        return null;
+    }
+
+    /// Generate main help text
+    pub fn printHelp(self: Self, writer: anytype) !void {
+        try writer.print("ligi v{s} - Human and LLM readable project management\n\n", .{self.version});
+        try writer.writeAll("Usage: ligi [options] <command> [command-options]\n\n");
+        try writer.writeAll("Commands:\n");
+        for (self.commands) |cmd| {
+            var names_buf: [64]u8 = undefined;
+            var names_len: usize = 0;
+            for (cmd.names, 0..) |name, idx| {
+                if (idx > 0) {
+                    names_buf[names_len] = ',';
+                    names_buf[names_len + 1] = ' ';
+                    names_len += 2;
+                }
+                @memcpy(names_buf[names_len..][0..name.len], name);
+                names_len += name.len;
+            }
+            try writer.print("  {s:<16} {s}\n", .{ names_buf[0..names_len], cmd.description });
+        }
+        try writer.writeAll("\nOptions:\n");
+        try writer.writeAll("  -h, --help       Show this help message\n");
+        try writer.writeAll("  -v, --version    Show version\n");
+        try writer.writeAll("  -q, --quiet      Suppress non-error output\n");
+    }
+
+    /// Generate command-specific help
+    pub fn printCommandHelp(self: Self, cmd: *const CommandDef, writer: anytype) !void {
+        _ = self;
+        try writer.print("Usage: ligi {s} [options]\n\n", .{cmd.canonical});
+        if (cmd.long_description) |desc| {
+            try writer.print("{s}\n\n", .{desc});
+        } else {
+            try writer.print("{s}\n\n", .{cmd.description});
+        }
+    }
+};
+
+/// All command definitions
+pub const COMMANDS = [_]CommandDef{
+    .{
+        .canonical = "init",
+        .names = &.{"init"},
+        .description = "Initialize ligi in current directory or globally",
+        .long_description =
+        \\Initialize ligi directory structure.
+        \\
+        \\Creates art/ directory with index/, template/, config/, and archive/
+        \\subdirectories. Also creates initial ligi_tags.md index file.
+        \\
+        \\Use --global to initialize ~/.ligi/ for global artifacts.
+        ,
+    },
+    .{
+        .canonical = "index",
+        .names = &.{ "index", "i" },
+        .description = "Index tags and links in documents",
+    },
+    .{
+        .canonical = "query",
+        .names = &.{ "query", "q" },
+        .description = "Query documents by tags or links",
+    },
+    .{
+        .canonical = "archive",
+        .names = &.{ "archive", "a" },
+        .description = "Move document to archive",
+    },
+};
+
+/// Build the ligi command registry
+pub fn buildRegistry() CommandRegistry {
+    return .{
+        .version = VERSION,
+        .commands = &COMMANDS,
+    };
+}
+
+/// Global options parsed by clap
+const GlobalParams = clap.parseParamsComptime(
+    \\-h, --help     Show this help message
+    \\-v, --version  Show version
+    \\-q, --quiet    Suppress non-error output
+    \\<str>...
+    \\
+);
+
+/// Init command options
+const InitParams = clap.parseParamsComptime(
+    \\-h, --help         Show this help message
+    \\-g, --global       Initialize global ~/.ligi instead of local ./art
+    \\-r, --root <str>   Override target directory
+    \\-q, --quiet        Suppress non-error output
+    \\
+);
+
+/// Run the CLI with the given arguments
+pub fn run(
+    allocator: std.mem.Allocator,
+    args: []const []const u8,
+    stdout: anytype,
+    stderr: anytype,
+) !u8 {
+    const registry = buildRegistry();
+
+    // Parse global options first, stopping at first positional (command)
+    var diag: clap.Diagnostic = .{};
+    var iter = clap.args.SliceIterator{ .args = args };
+
+    var global_res = clap.parseEx(clap.Help, &GlobalParams, clap.parsers.default, &iter, .{
+        .diagnostic = &diag,
+        .allocator = allocator,
+        .terminating_positional = 0, // Stop after command name
+    }) catch |err| {
+        try diag.report(stderr, err);
+        return 1;
+    };
+    defer global_res.deinit();
+
+    const global_args = global_res.args;
+    const positionals = global_res.positionals[0]; // <str>... is first positional
+
+    // Handle --help (no command)
+    if (global_args.help != 0) {
+        // Check if there's a command for command-specific help
+        if (positionals.len > 0) {
+            const cmd_name = positionals[0];
+            if (registry.findCommand(cmd_name)) |cmd| {
+                try registry.printCommandHelp(cmd, stdout);
+                return 0;
+            }
+        }
+        try registry.printHelp(stdout);
+        return 0;
+    }
+
+    // Handle --version
+    if (global_args.version != 0) {
+        try stdout.print("ligi {s}\n", .{VERSION});
+        return 0;
+    }
+
+    // No command - show help
+    if (positionals.len == 0) {
+        try registry.printHelp(stdout);
+        return 0;
+    }
+
+    const cmd_name = positionals[0];
+
+    // Find command
+    const cmd = registry.findCommand(cmd_name) orelse {
+        try stderr.print("error: unknown command '{s}'\n\n", .{cmd_name});
+        try registry.printHelp(stderr);
+        return 1;
+    };
+
+    // Get remaining arguments after the command
+    const remaining_args = args[iter.index..];
+
+    // Dispatch to command handler
+    if (std.mem.eql(u8, cmd.canonical, "init")) {
+        return runInitCommand(allocator, remaining_args, global_args.quiet != 0, stdout, stderr);
+    } else if (std.mem.eql(u8, cmd.canonical, "index")) {
+        try stderr.writeAll("error: 'index' command not yet implemented\n");
+        return 1;
+    } else if (std.mem.eql(u8, cmd.canonical, "query")) {
+        try stderr.writeAll("error: 'query' command not yet implemented\n");
+        return 1;
+    } else if (std.mem.eql(u8, cmd.canonical, "archive")) {
+        try stderr.writeAll("error: 'archive' command not yet implemented\n");
+        return 1;
+    }
+
+    try stderr.print("error: command '{s}' has no handler\n", .{cmd.canonical});
+    return 127;
+}
+
+/// Run the init command with clap parsing
+fn runInitCommand(
+    allocator: std.mem.Allocator,
+    args: []const []const u8,
+    global_quiet: bool,
+    stdout: anytype,
+    stderr: anytype,
+) !u8 {
+    var diag: clap.Diagnostic = .{};
+    var iter = clap.args.SliceIterator{ .args = args };
+
+    var res = clap.parseEx(clap.Help, &InitParams, clap.parsers.default, &iter, .{
+        .diagnostic = &diag,
+        .allocator = allocator,
+    }) catch |err| {
+        try diag.report(stderr, err);
+        return 1;
+    };
+    defer res.deinit();
+
+    // Handle --help for init
+    if (res.args.help != 0) {
+        const registry = buildRegistry();
+        if (registry.findCommand("init")) |cmd| {
+            try registry.printCommandHelp(cmd, stdout);
+        }
+        return 0;
+    }
+
+    const init_cmd = @import("commands/init.zig");
+    const quiet = (res.args.quiet != 0) or global_quiet;
+
+    return init_cmd.run(
+        allocator,
+        res.args.global != 0,
+        res.args.root,
+        quiet,
+        stdout,
+        stderr,
+    );
+}
+
+// ============================================================================
+// Tests
+// ============================================================================
+
+test "findCommand returns command for canonical name" {
+    const registry = buildRegistry();
+    const cmd = registry.findCommand("init");
+    try std.testing.expect(cmd != null);
+    try std.testing.expectEqualStrings("init", cmd.?.canonical);
+}
+
+test "findCommand returns same command for alias" {
+    const registry = buildRegistry();
+    const cmd_canonical = registry.findCommand("index");
+    const cmd_alias = registry.findCommand("i");
+    try std.testing.expect(cmd_canonical != null);
+    try std.testing.expect(cmd_alias != null);
+    try std.testing.expectEqualStrings(cmd_canonical.?.canonical, cmd_alias.?.canonical);
+}
+
+test "findCommand returns null for unknown command" {
+    const registry = buildRegistry();
+    const cmd = registry.findCommand("nonexistent");
+    try std.testing.expect(cmd == null);
+}
+
+test "printHelp includes all commands" {
+    const registry = buildRegistry();
+    var buf: [2048]u8 = undefined;
+    var stream = std.io.fixedBufferStream(&buf);
+    try registry.printHelp(stream.writer());
+    const output = stream.getWritten();
+
+    try std.testing.expect(std.mem.indexOf(u8, output, "init") != null);
+    try std.testing.expect(std.mem.indexOf(u8, output, "index") != null);
+    try std.testing.expect(std.mem.indexOf(u8, output, "query") != null);
+    try std.testing.expect(std.mem.indexOf(u8, output, "archive") != null);
+}
+
+test "printHelp shows aliases" {
+    const registry = buildRegistry();
+    var buf: [2048]u8 = undefined;
+    var stream = std.io.fixedBufferStream(&buf);
+    try registry.printHelp(stream.writer());
+    const output = stream.getWritten();
+
+    try std.testing.expect(std.mem.indexOf(u8, output, "index, i") != null);
+}
+
+test "clap module is available" {
+    // Verify clap is importable and has expected types
+    _ = clap.Diagnostic;
+    _ = clap.parseParamsComptime;
+}
+
+test "GlobalParams are valid" {
+    // Verify global params compile correctly
+    _ = GlobalParams;
+}
+
+test "InitParams are valid" {
+    // Verify init params compile correctly
+    _ = InitParams;
+}
