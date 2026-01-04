@@ -154,8 +154,8 @@ fn installCron(
         return 2;
     }
 
-    var new_cron = std.ArrayList(u8).init(allocator);
-    defer new_cron.deinit();
+    var new_cron: std.ArrayList(u8) = .empty;
+    defer new_cron.deinit(allocator);
 
     var lines = std.mem.splitScalar(u8, existing_cron, '\n');
     while (lines.next()) |line| {
@@ -168,11 +168,11 @@ fn installCron(
         if (std.mem.indexOf(u8, line, script_path) != null) {
             continue;
         }
-        try new_cron.appendSlice(line);
-        try new_cron.append('\n');
+        try new_cron.appendSlice(allocator, line);
+        try new_cron.append(allocator, '\n');
     }
 
-    try new_cron.writer().print("{s} {s} {s}\n", .{ schedule, script_path, CRON_MARKER });
+    try new_cron.writer(allocator).print("{s} {s} {s}\n", .{ schedule, script_path, CRON_MARKER });
 
     if (try runCommandWithStdin(allocator, null, &.{ "crontab", "-" }, new_cron.items) != 0) {
         try stderr.writeAll("error: failed to install cron job\n");
@@ -202,10 +202,9 @@ fn writeBackupScript(path: []const u8) !void {
         \\
     ;
 
-    var file = try std.fs.cwd().createFile(path, .{ .truncate = true });
+    var file = try std.fs.cwd().createFile(path, .{ .truncate = true, .mode = 0o755 });
     defer file.close();
     try file.writeAll(content);
-    try std.posix.chmod(path, 0o755);
 }
 
 const RunResult = struct {

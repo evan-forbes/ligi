@@ -5,6 +5,7 @@ pub const paths = @import("paths.zig");
 pub const fs = @import("fs.zig");
 pub const config = @import("config.zig");
 pub const global_index = @import("global_index.zig");
+pub const tag_index = @import("tag_index.zig");
 
 // Re-export commonly used types
 pub const ErrorCategory = errors.ErrorCategory;

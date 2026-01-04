@@ -3,5 +3,4 @@
 This file is auto-maintained by ligi. Each tag links to its index file.
 
 ## Tags
-
-(No tags indexed yet)
+- [tag_name](tags/tag_name.md)

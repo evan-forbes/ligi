@@ -197,6 +197,22 @@ const BackupParams = clap.parseParamsComptime(
     \\
 );
 
+/// Index command options
+const IndexParams = clap.parseParamsComptime(
+    \\-h, --help         Show this help message
+    \\-r, --root <str>   Repository root directory
+    \\-f, --file <str>   Index single file only
+    \\-q, --quiet        Suppress non-error output
+    \\
+);
+
+/// Query command options
+const QueryParams = clap.parseParamsComptime(
+    \\-h, --help         Show this help message
+    \\<str>...
+    \\
+);
+
 /// Run the CLI with the given arguments
 pub fn run(
     allocator: std.mem.Allocator,
@@ -265,11 +281,9 @@ pub fn run(
     if (std.mem.eql(u8, cmd.canonical, "init")) {
         return runInitCommand(allocator, remaining_args, global_args.quiet != 0, stdout, stderr);
     } else if (std.mem.eql(u8, cmd.canonical, "index")) {
-        try stderr.writeAll("error: 'index' command not yet implemented\n");
-        return 1;
+        return runIndexCommand(allocator, remaining_args, global_args.quiet != 0, stdout, stderr);
     } else if (std.mem.eql(u8, cmd.canonical, "query")) {
-        try stderr.writeAll("error: 'query' command not yet implemented\n");
-        return 1;
+        return runQueryCommand(allocator, remaining_args, global_args.quiet != 0, stdout, stderr);
     } else if (std.mem.eql(u8, cmd.canonical, "archive")) {
         try stderr.writeAll("error: 'archive' command not yet implemented\n");
         return 1;
@@ -455,6 +469,66 @@ fn runBackupCommand(
     );
 }
 
+/// Run the index command with clap parsing
+fn runIndexCommand(
+    allocator: std.mem.Allocator,
+    args: []const []const u8,
+    global_quiet: bool,
+    stdout: anytype,
+    stderr: anytype,
+) !u8 {
+    var diag: clap.Diagnostic = .{};
+    var iter = clap.args.SliceIterator{ .args = args };
+
+    var res = clap.parseEx(clap.Help, &IndexParams, clap.parsers.default, &iter, .{
+        .diagnostic = &diag,
+        .allocator = allocator,
+    }) catch |err| {
+        try diag.report(stderr, err);
+        return 1;
+    };
+    defer res.deinit();
+
+    // Handle --help for index
+    if (res.args.help != 0) {
+        const registry = buildRegistry();
+        if (registry.findCommand("index")) |cmd| {
+            try registry.printCommandHelp(cmd, stdout);
+        }
+        try stdout.writeAll("\nOptions:\n");
+        try stdout.writeAll("  -r, --root <path>   Repository root directory\n");
+        try stdout.writeAll("  -f, --file <path>   Index single file only\n");
+        try stdout.writeAll("  -q, --quiet         Suppress non-error output\n");
+        return 0;
+    }
+
+    const index_cmd = @import("commands/index.zig");
+    const quiet = (res.args.quiet != 0) or global_quiet;
+
+    return index_cmd.run(
+        allocator,
+        res.args.root,
+        res.args.file,
+        quiet,
+        stdout,
+        stderr,
+    );
+}
+
+/// Run the query command
+fn runQueryCommand(
+    allocator: std.mem.Allocator,
+    args: []const []const u8,
+    global_quiet: bool,
+    stdout: anytype,
+    stderr: anytype,
+) !u8 {
+    // For query, we pass all remaining args to the command handler
+    // since it has subcommands (t/tag) and complex argument structure
+    const query_cmd = @import("commands/query.zig");
+    return query_cmd.run(allocator, args, stdout, stderr, global_quiet);
+}
+
 /// Run the template fill subcommand
 fn runTemplateFillCommand(
     allocator: std.mem.Allocator,
@@ -579,4 +653,14 @@ test "TemplateParams are valid" {
 test "BackupParams are valid" {
     // Verify backup params compile correctly
     _ = BackupParams;
+}
+
+test "IndexParams are valid" {
+    // Verify index params compile correctly
+    _ = IndexParams;
+}
+
+test "QueryParams are valid" {
+    // Verify query params compile correctly
+    _ = QueryParams;
 }
