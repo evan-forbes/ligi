@@ -131,5 +131,6 @@ Parsing is line-based and minimal:
 
 ## Part 7: Future Extensions (Non-blocking)
 
-- `ligi check --prune` removes broken paths from the global index.
+- `ligi check --prune` removes broken paths from the global index and prunes tag indexes. See [Pruning Broken Links Plan](impl_pruning_broken_links.md).
+- `ligi index --global` rebuilds global tag indexes from all repos. See [Global Rebuild Tag Indexes Plan](impl_global_rebuild_tag_indexes.md).
 - `ligi list` (or `ligi repos`) prints all known repos from the global index without validation.

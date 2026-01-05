@@ -571,7 +571,7 @@ Tests (smoke):
 
 ### 9.2 File System Edge Cases
 
-- **File removed since last index**: full rebuild clears it from local index; global indexes may keep stale entries (acceptable for now).
+- **File removed since last index**: full rebuild clears it from local index; global indexes are kept authoritative via `ligi check --prune` or `ligi index --global` (see [Pruning Broken Links Plan](impl_pruning_broken_links.md) and [Global Rebuild Tag Indexes Plan](impl_global_rebuild_tag_indexes.md)).
 - **Empty tag index**: keep `## Tags` with empty list.
 - **Symlinks**: respect `config.index.follow_symlinks` (default false = skip).
 - **Symlink loops**: if following symlinks, track visited inodes to prevent infinite recursion.

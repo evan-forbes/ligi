@@ -198,6 +198,7 @@ const CheckParams = clap.parseParamsComptime(
     \\-h, --help         Show this help message
     \\-o, --output <str> Output format: text (default) or json
     \\-r, --root <str>   Limit scope to specific root
+    \\-p, --prune        Remove broken entries from indexes
     \\
 );
 
@@ -223,6 +224,8 @@ const IndexParams = clap.parseParamsComptime(
     \\-h, --help         Show this help message
     \\-r, --root <str>   Repository root directory
     \\-f, --file <str>   Index single file only
+    \\-g, --global       Rebuild global tag indexes from all repos
+    \\--no-local         Do not update local tag indexes (with --global)
     \\-q, --quiet        Suppress non-error output
     \\
 );
@@ -400,6 +403,10 @@ fn runCheckCommand(
         if (registry.findCommand("check")) |cmd| {
             try registry.printCommandHelp(cmd, stdout);
         }
+        try stdout.writeAll("\nOptions:\n");
+        try stdout.writeAll("  -o, --output <str>  Output format: text (default) or json\n");
+        try stdout.writeAll("  -r, --root <path>   Limit scope to specific root\n");
+        try stdout.writeAll("  -p, --prune         Remove broken entries from indexes\n");
         return 0;
     }
 
@@ -421,6 +428,7 @@ fn runCheckCommand(
         allocator,
         output_format,
         res.args.root,
+        res.args.prune != 0,
         stdout,
         stderr,
     );
@@ -532,6 +540,8 @@ fn runIndexCommand(
         try stdout.writeAll("\nOptions:\n");
         try stdout.writeAll("  -r, --root <path>   Repository root directory\n");
         try stdout.writeAll("  -f, --file <path>   Index single file only\n");
+        try stdout.writeAll("  -g, --global        Rebuild global tag indexes from all repos\n");
+        try stdout.writeAll("  --no-local          Do not update local tag indexes (with --global)\n");
         try stdout.writeAll("  -q, --quiet         Suppress non-error output\n");
         return 0;
     }
@@ -543,6 +553,8 @@ fn runIndexCommand(
         allocator,
         res.args.root,
         res.args.file,
+        res.args.global != 0,
+        res.args.@"no-local" != 0,
         quiet,
         stdout,
         stderr,

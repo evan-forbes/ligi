@@ -9,6 +9,12 @@ This document defines how `ligi check --prune` (`-p`) removes broken entries fro
 
 The goal is to keep indexes authoritative without deleting or moving any user content under `art/`.
 
+## Related Documents
+
+- [Tagging System Implementation Plan](impl_tagging_system.md)
+- [Global Index Implementation Plan](impl_global_index.md)
+- [Global Rebuild Tag Indexes Plan](impl_global_rebuild_tag_indexes.md)
+
 ---
 
 ## Part 1: Decisions (Finalized)

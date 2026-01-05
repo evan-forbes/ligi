@@ -11,12 +11,15 @@ const tag_index = core.tag_index;
 const config = core.config;
 const fs = core.fs;
 const paths = core.paths;
+const global_index = core.global_index;
 
 /// Run the index command
 pub fn run(
     allocator: std.mem.Allocator,
     root: ?[]const u8,
     file: ?[]const u8,
+    global: bool,
+    no_local: bool,
     quiet: bool,
     stdout: anytype,
     stderr: anytype,
@@ -25,6 +28,58 @@ pub fn run(
     var arena = std.heap.ArenaAllocator.init(allocator);
     defer arena.deinit();
     const arena_alloc = arena.allocator();
+
+    if (global) {
+        if (file != null) {
+            try stderr.writeAll("error: --file is not compatible with --global\n");
+            return 1;
+        }
+        if (root != null) {
+            try stderr.writeAll("error: --root is not compatible with --global\n");
+            return 1;
+        }
+        // Load global index
+        var index = switch (global_index.loadGlobalIndex(arena_alloc)) {
+            .ok => |i| i,
+            .err => |e| {
+                try e.write(stderr);
+                return e.exitCode();
+            },
+        };
+        defer index.deinit();
+
+        const global_art = switch (paths.getGlobalArtPath(arena_alloc)) {
+            .ok => |p| p,
+            .err => |e| {
+                try e.write(stderr);
+                return e.exitCode();
+            },
+        };
+
+        const cfg = config.getDefaultConfig();
+        const ignore_patterns = cfg.index.ignore_patterns;
+        const follow_symlinks = cfg.index.follow_symlinks;
+
+        const stats = try tag_index.rebuildGlobalTagIndexesFromRepos(
+            arena_alloc,
+            index.repos.items,
+            global_art,
+            !no_local,
+            follow_symlinks,
+            ignore_patterns,
+            stdout,
+            stderr,
+            quiet,
+        );
+
+        if (!quiet) {
+            try stdout.print("repos processed: {d}\n", .{stats.repos_processed});
+            try stdout.print("tags written: {d}\n", .{stats.tags_written});
+            try stdout.print("files indexed: {d}\n", .{stats.files_indexed});
+        }
+
+        return 0;
+    }
 
     // Resolve root directory
     const root_path = root orelse ".";
@@ -56,6 +111,11 @@ pub fn run(
     const cfg = config.getDefaultConfig();
     const ignore_patterns = cfg.index.ignore_patterns;
     const follow_symlinks = cfg.index.follow_symlinks;
+
+    if (no_local) {
+        try stderr.writeAll("error: --no-local is only valid with --global\n");
+        return 1;
+    }
 
     // Collect tags
     var tag_map: tag_index.TagMap = undefined;

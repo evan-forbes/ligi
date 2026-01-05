@@ -185,6 +185,16 @@ fn startsWithAt(content: []const u8, pos: usize, prefix: []const u8) bool {
     return std.mem.eql(u8, content[pos..][0..prefix.len], prefix);
 }
 
+/// Sort a slice of strings lexicographically in-place.
+/// Used throughout for deterministic index output.
+fn sortStrings(slice: [][]const u8) void {
+    std.mem.sort([]const u8, slice, {}, struct {
+        fn lessThan(_: void, a: []const u8, b: []const u8) bool {
+            return std.mem.order(u8, a, b) == .lt;
+        }
+    }.lessThan);
+}
+
 /// Represents a mapping from tags to files
 pub const TagMap = struct {
     /// Maps tag name -> list of file paths
@@ -272,11 +282,7 @@ pub const TagMap = struct {
         }
 
         const slice = try keys.toOwnedSlice(allocator);
-        std.mem.sort([]const u8, slice, {}, struct {
-            fn lessThan(_: void, a: []const u8, b: []const u8) bool {
-                return std.mem.order(u8, a, b) == .lt;
-            }
-        }.lessThan);
+        sortStrings(slice);
         return slice;
     }
 
@@ -286,14 +292,22 @@ pub const TagMap = struct {
 
         const result = try allocator.alloc([]const u8, files.items.len);
         @memcpy(result, files.items);
-
-        std.mem.sort([]const u8, result, {}, struct {
-            fn lessThan(_: void, a: []const u8, b: []const u8) bool {
-                return std.mem.order(u8, a, b) == .lt;
-            }
-        }.lessThan);
+        sortStrings(result);
         return result;
     }
+};
+
+/// Result counts for pruning tag indexes
+pub const PruneResult = struct {
+    pruned_entries: usize = 0,
+    pruned_tags: usize = 0,
+};
+
+/// Stats returned by a global rebuild
+pub const RebuildStats = struct {
+    repos_processed: usize = 0,
+    tags_written: usize = 0,
+    files_indexed: usize = 0,
 };
 
 /// Parse tags from a tag index file (ligi_tags.md content)
@@ -524,6 +538,16 @@ fn walkArtDirectory(
     }
 }
 
+fn stripArtPrefix(path: []const u8) ?[]const u8 {
+    if (std.mem.startsWith(u8, path, "art/")) {
+        return path[4..];
+    }
+    if (std.mem.startsWith(u8, path, "art\\")) {
+        return path[4..];
+    }
+    return null;
+}
+
 /// Process a single file and add its tags to the map
 fn processFile(
     allocator: std.mem.Allocator,
@@ -592,6 +616,25 @@ pub const TAG_INDEX_HEADER =
     \\
 ;
 
+fn renderTagIndexFromTags(allocator: std.mem.Allocator, tags: []const []const u8) ![]const u8 {
+    var output: std.ArrayList(u8) = .empty;
+    errdefer output.deinit(allocator);
+    const writer = output.writer(allocator);
+
+    try writer.writeAll(TAG_INDEX_HEADER);
+
+    const sorted = try allocator.alloc([]const u8, tags.len);
+    defer allocator.free(sorted);
+    @memcpy(sorted, tags);
+    sortStrings(sorted);
+
+    for (sorted) |tag| {
+        try writer.print("- [{s}](tags/{s}.md)\n", .{ tag, tag });
+    }
+
+    return output.toOwnedSlice(allocator);
+}
+
 /// Render the main tag index file (ligi_tags.md)
 pub fn renderTagIndex(allocator: std.mem.Allocator, tag_map: *const TagMap) ![]const u8 {
     var output: std.ArrayList(u8) = .empty;
@@ -625,12 +668,7 @@ pub fn renderPerTagIndex(allocator: std.mem.Allocator, tag: []const u8, files: [
     const sorted = try allocator.alloc([]const u8, files.len);
     defer allocator.free(sorted);
     @memcpy(sorted, files);
-
-    std.mem.sort([]const u8, sorted, {}, struct {
-        fn lessThan(_: void, a: []const u8, b: []const u8) bool {
-            return std.mem.order(u8, a, b) == .lt;
-        }
-    }.lessThan);
+    sortStrings(sorted);
 
     for (sorted) |file| {
         try writer.print("- {s}\n", .{file});
@@ -684,7 +722,7 @@ pub fn writeLocalIndexes(
     const tag_index_content = try renderTagIndex(allocator, tag_map);
     defer allocator.free(tag_index_content);
 
-    try writeFileAtomic(tag_index_path, tag_index_content);
+    try writeFile(tag_index_path, tag_index_content);
     if (!quiet) {
         if (existed) {
             try stdout.print("updated: {s}\n", .{tag_index_path});
@@ -719,7 +757,7 @@ pub fn writeLocalIndexes(
         const content = try renderPerTagIndex(allocator, tag, files.items);
         defer allocator.free(content);
 
-        try writeFileAtomic(full_path, content);
+        try writeFile(full_path, content);
         if (!quiet) {
             if (tag_existed) {
                 try stdout.print("updated: {s}\n", .{full_path});
@@ -751,7 +789,7 @@ pub fn writeLocalIndexes(
             defer allocator.free(empty);
 
             const tag_existed = fs.fileExists(full_path);
-            try writeFileAtomic(full_path, empty);
+            try writeFile(full_path, empty);
             if (!quiet) {
                 if (tag_existed) {
                     try stdout.print("updated: {s}\n", .{full_path});
@@ -933,19 +971,14 @@ pub fn writeGlobalIndexes(
         while (fit.next()) |f| {
             try file_list.append(allocator, f.*);
         }
-
-        std.mem.sort([]const u8, file_list.items, {}, struct {
-            fn lessThan(_: void, a: []const u8, b: []const u8) bool {
-                return std.mem.order(u8, a, b) == .lt;
-            }
-        }.lessThan);
+        sortStrings(file_list.items);
 
         for (file_list.items) |file| {
             try tag_writer.print("- {s}\n", .{file});
         }
 
         const tag_existed = fs.fileExists(full_path);
-        try writeFileAtomic(full_path, tag_output.items);
+        try writeFile(full_path, tag_output.items);
         if (!quiet) {
             if (tag_existed) {
                 try stdout.print("updated: {s}\n", .{full_path});
@@ -960,11 +993,7 @@ pub fn writeGlobalIndexes(
     }
 
     // Render and write global tag index (only tags with files)
-    std.mem.sort([]const u8, global_tag_list.items, {}, struct {
-        fn lessThan(_: void, a: []const u8, b: []const u8) bool {
-            return std.mem.order(u8, a, b) == .lt;
-        }
-    }.lessThan);
+    sortStrings(global_tag_list.items);
 
     var output: std.ArrayList(u8) = .empty;
     defer output.deinit(allocator);
@@ -976,7 +1005,7 @@ pub fn writeGlobalIndexes(
     }
 
     const global_existed = fs.fileExists(global_tag_index_path);
-    try writeFileAtomic(global_tag_index_path, output.items);
+    try writeFile(global_tag_index_path, output.items);
     if (!quiet) {
         if (global_existed) {
             try stdout.print("updated: {s}\n", .{global_tag_index_path});
@@ -986,8 +1015,408 @@ pub fn writeGlobalIndexes(
     }
 }
 
-/// Write a file atomically (write to temp, then rename)
-fn writeFileAtomic(path: []const u8, content: []const u8) !void {
+/// Write global index files authoritatively at a specific global art path.
+/// Rewrites the global tag list and per-tag files.
+pub fn writeGlobalIndexesAuthoritative(
+    allocator: std.mem.Allocator,
+    tag_map: *const TagMap,
+    global_art_path: []const u8,
+    stdout: anytype,
+    quiet: bool,
+) !void {
+    const global_tags_dir = try std.fs.path.join(allocator, &.{ global_art_path, "index", "tags" });
+    defer allocator.free(global_tags_dir);
+
+    std.fs.cwd().makePath(global_tags_dir) catch |err| {
+        std.debug.print("error: cannot create global index directory: {s}: {s}\n", .{ global_tags_dir, @errorName(err) });
+        return err;
+    };
+
+    const global_tag_index_path = try std.fs.path.join(allocator, &.{ global_art_path, "index", "ligi_tags.md" });
+    defer allocator.free(global_tag_index_path);
+
+    // Track existing tags for pruning
+    var existing_tags: [][]const u8 = &[_][]const u8{};
+    if (fs.fileExists(global_tag_index_path)) {
+        const existing_content = switch (fs.readFile(allocator, global_tag_index_path)) {
+            .ok => |c| c,
+            .err => null,
+        };
+        if (existing_content) |c| {
+            defer allocator.free(c);
+            existing_tags = try parseTagListFromIndex(allocator, c);
+        }
+    }
+    defer {
+        if (existing_tags.len > 0) {
+            freeTagList(allocator, existing_tags);
+        }
+    }
+
+    // Write tag list
+    const tag_index_content = try renderTagIndex(allocator, tag_map);
+    defer allocator.free(tag_index_content);
+
+    const tag_index_existed = fs.fileExists(global_tag_index_path);
+    try writeFile(global_tag_index_path, tag_index_content);
+    if (!quiet) {
+        if (tag_index_existed) {
+            try stdout.print("updated: {s}\n", .{global_tag_index_path});
+        } else {
+            try stdout.print("created: {s}\n", .{global_tag_index_path});
+        }
+    }
+
+    // Write per-tag index files
+    const tags = try tag_map.getSortedTags(allocator);
+    defer allocator.free(tags);
+
+    for (tags) |tag| {
+        const files = tag_map.map.get(tag) orelse continue;
+
+        const tag_file_path = try std.fs.path.join(allocator, &.{ global_art_path, "index", "tags", tag });
+        defer allocator.free(tag_file_path);
+
+        const full_path = try std.fmt.allocPrint(allocator, "{s}.md", .{tag_file_path});
+        defer allocator.free(full_path);
+
+        if (std.fs.path.dirname(full_path)) |parent| {
+            std.fs.cwd().makePath(parent) catch {};
+        }
+
+        const content = try renderPerTagIndex(allocator, tag, files.items);
+        defer allocator.free(content);
+
+        const tag_existed = fs.fileExists(full_path);
+        try writeFile(full_path, content);
+        if (!quiet) {
+            if (tag_existed) {
+                try stdout.print("updated: {s}\n", .{full_path});
+            } else {
+                try stdout.print("created: {s}\n", .{full_path});
+            }
+        }
+    }
+
+    // Prune tags not in the new map (write empty per-tag files)
+    if (existing_tags.len > 0) {
+        for (existing_tags) |old_tag| {
+            if (tag_map.map.contains(old_tag)) continue;
+
+            const tag_file_path = try std.fs.path.join(allocator, &.{ global_art_path, "index", "tags", old_tag });
+            defer allocator.free(tag_file_path);
+
+            const full_path = try std.fmt.allocPrint(allocator, "{s}.md", .{tag_file_path});
+            defer allocator.free(full_path);
+
+            if (std.fs.path.dirname(full_path)) |parent| {
+                std.fs.cwd().makePath(parent) catch {};
+            }
+
+            const empty = try renderPerTagIndex(allocator, old_tag, &[_][]const u8{});
+            defer allocator.free(empty);
+
+            const tag_existed = fs.fileExists(full_path);
+            try writeFile(full_path, empty);
+            if (!quiet) {
+                if (tag_existed) {
+                    try stdout.print("updated: {s}\n", .{full_path});
+                } else {
+                    try stdout.print("created: {s}\n", .{full_path});
+                }
+            }
+        }
+    }
+}
+
+fn pathBelongsToRepo(path: []const u8, repo_roots: []const []const u8) bool {
+    const sep = std.fs.path.sep;
+    for (repo_roots) |repo| {
+        if (std.mem.eql(u8, path, repo)) return true;
+        if (path.len > repo.len and std.mem.startsWith(u8, path, repo) and path[repo.len] == sep) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/// Prune broken entries from a local tag index (art/index).
+pub fn pruneLocalTagIndexes(
+    allocator: std.mem.Allocator,
+    art_path: []const u8,
+    stderr: anytype,
+) !PruneResult {
+    var result: PruneResult = .{};
+
+    const tag_index_path = try std.fs.path.join(allocator, &.{ art_path, "index", "ligi_tags.md" });
+    defer allocator.free(tag_index_path);
+
+    if (!fs.fileExists(tag_index_path)) {
+        return result;
+    }
+
+    const content = switch (fs.readFile(allocator, tag_index_path)) {
+        .ok => |c| c,
+        .err => return result,
+    };
+    defer allocator.free(content);
+
+    const tags = parseTagListFromIndex(allocator, content) catch {
+        try stderr.print("warning: failed to parse tag index: {s}\n", .{tag_index_path});
+        return result;
+    };
+    defer freeTagList(allocator, tags);
+
+    const tags_dir = try std.fs.path.join(allocator, &.{ art_path, "index", "tags" });
+    defer allocator.free(tags_dir);
+    std.fs.cwd().makePath(tags_dir) catch {};
+
+    var kept_tags: std.ArrayList([]const u8) = .empty;
+    defer kept_tags.deinit(allocator);
+
+    for (tags) |tag| {
+        const tag_file_path = try std.fs.path.join(allocator, &.{ art_path, "index", "tags", tag });
+        defer allocator.free(tag_file_path);
+
+        const full_path = try std.fmt.allocPrint(allocator, "{s}.md", .{tag_file_path});
+        defer allocator.free(full_path);
+
+        const files = readTagIndex(allocator, full_path) catch |err| {
+            if (err == error.FileNotFound) {
+                result.pruned_tags += 1;
+                continue;
+            }
+            try stderr.print("warning: failed to read tag index: {s}\n", .{full_path});
+            result.pruned_tags += 1;
+            continue;
+        };
+        defer allocator.free(files);
+
+        var kept_files: std.ArrayList([]const u8) = .empty;
+        defer kept_files.deinit(allocator);
+
+        for (files) |file| {
+            const relative = stripArtPrefix(file) orelse {
+                allocator.free(file);
+                result.pruned_entries += 1;
+                continue;
+            };
+
+            const full_file_path = try std.fs.path.join(allocator, &.{ art_path, relative });
+            defer allocator.free(full_file_path);
+
+            if (!fs.fileExists(full_file_path)) {
+                allocator.free(file);
+                result.pruned_entries += 1;
+                continue;
+            }
+
+            try kept_files.append(allocator, file);
+        }
+
+        const content_out = try renderPerTagIndex(allocator, tag, kept_files.items);
+        defer allocator.free(content_out);
+
+        if (std.fs.path.dirname(full_path)) |parent| {
+            std.fs.cwd().makePath(parent) catch {};
+        }
+        try writeFile(full_path, content_out);
+
+        if (kept_files.items.len > 0) {
+            try kept_tags.append(allocator, tag);
+        } else {
+            result.pruned_tags += 1;
+        }
+
+        for (kept_files.items) |file| {
+            allocator.free(file);
+        }
+    }
+
+    const tag_index_content = try renderTagIndexFromTags(allocator, kept_tags.items);
+    defer allocator.free(tag_index_content);
+    try writeFile(tag_index_path, tag_index_content);
+
+    return result;
+}
+
+/// Prune broken entries from a global tag index (~/.ligi/art/index).
+pub fn pruneGlobalTagIndexes(
+    allocator: std.mem.Allocator,
+    global_art_path: []const u8,
+    repo_roots: []const []const u8,
+    stderr: anytype,
+) !PruneResult {
+    var result: PruneResult = .{};
+
+    const tag_index_path = try std.fs.path.join(allocator, &.{ global_art_path, "index", "ligi_tags.md" });
+    defer allocator.free(tag_index_path);
+
+    if (!fs.fileExists(tag_index_path)) {
+        return result;
+    }
+
+    const content = switch (fs.readFile(allocator, tag_index_path)) {
+        .ok => |c| c,
+        .err => return result,
+    };
+    defer allocator.free(content);
+
+    const tags = parseTagListFromIndex(allocator, content) catch {
+        try stderr.print("warning: failed to parse global tag index: {s}\n", .{tag_index_path});
+        return result;
+    };
+    defer freeTagList(allocator, tags);
+
+    const tags_dir = try std.fs.path.join(allocator, &.{ global_art_path, "index", "tags" });
+    defer allocator.free(tags_dir);
+    std.fs.cwd().makePath(tags_dir) catch {};
+
+    var kept_tags: std.ArrayList([]const u8) = .empty;
+    defer kept_tags.deinit(allocator);
+
+    for (tags) |tag| {
+        const tag_file_path = try std.fs.path.join(allocator, &.{ global_art_path, "index", "tags", tag });
+        defer allocator.free(tag_file_path);
+
+        const full_path = try std.fmt.allocPrint(allocator, "{s}.md", .{tag_file_path});
+        defer allocator.free(full_path);
+
+        const files = readTagIndex(allocator, full_path) catch |err| {
+            if (err == error.FileNotFound) {
+                result.pruned_tags += 1;
+                continue;
+            }
+            try stderr.print("warning: failed to read global tag index: {s}\n", .{full_path});
+            result.pruned_tags += 1;
+            continue;
+        };
+        defer allocator.free(files);
+
+        var kept_files: std.ArrayList([]const u8) = .empty;
+        defer kept_files.deinit(allocator);
+
+        for (files) |file| {
+            if (!std.fs.path.isAbsolute(file)) {
+                allocator.free(file);
+                result.pruned_entries += 1;
+                continue;
+            }
+
+            if (!fs.fileExists(file) or !pathBelongsToRepo(file, repo_roots)) {
+                allocator.free(file);
+                result.pruned_entries += 1;
+                continue;
+            }
+
+            try kept_files.append(allocator, file);
+        }
+
+        const content_out = try renderPerTagIndex(allocator, tag, kept_files.items);
+        defer allocator.free(content_out);
+
+        if (std.fs.path.dirname(full_path)) |parent| {
+            std.fs.cwd().makePath(parent) catch {};
+        }
+        try writeFile(full_path, content_out);
+
+        if (kept_files.items.len > 0) {
+            try kept_tags.append(allocator, tag);
+        } else {
+            result.pruned_tags += 1;
+        }
+
+        for (kept_files.items) |file| {
+            allocator.free(file);
+        }
+    }
+
+    const tag_index_content = try renderTagIndexFromTags(allocator, kept_tags.items);
+    defer allocator.free(tag_index_content);
+    try writeFile(tag_index_path, tag_index_content);
+
+    return result;
+}
+
+/// Rebuild global tag indexes from a list of repo roots.
+pub fn rebuildGlobalTagIndexesFromRepos(
+    allocator: std.mem.Allocator,
+    repos: []const []const u8,
+    global_art_path: []const u8,
+    update_local: bool,
+    follow_symlinks: bool,
+    ignore_patterns: []const []const u8,
+    stdout: anytype,
+    stderr: anytype,
+    quiet: bool,
+) !RebuildStats {
+    var stats: RebuildStats = .{};
+    var global_map = TagMap.init(allocator);
+    defer global_map.deinit();
+
+    for (repos) |repo_path| {
+        if (!fs.dirExists(repo_path)) {
+            try stderr.print("warning: repo missing: {s}\n", .{repo_path});
+            continue;
+        }
+
+        const art_path = try std.fs.path.join(allocator, &.{ repo_path, "art" });
+        defer allocator.free(art_path);
+
+        if (!fs.dirExists(art_path)) {
+            try stderr.print("warning: art directory missing: {s}\n", .{art_path});
+            continue;
+        }
+
+        if (!quiet) {
+            try stdout.print("indexing: {s}\n", .{repo_path});
+        }
+
+        var repo_tag_map = try collectTags(
+            allocator,
+            art_path,
+            null,
+            follow_symlinks,
+            ignore_patterns,
+            stderr,
+        );
+        defer repo_tag_map.deinit();
+
+        if (update_local) {
+            _ = try writeLocalIndexes(allocator, art_path, &repo_tag_map, stdout, quiet);
+        }
+
+        var it = repo_tag_map.map.iterator();
+        while (it.next()) |entry| {
+            const tag = entry.key_ptr.*;
+            for (entry.value_ptr.items) |file| {
+                const abs_file = try std.fs.path.join(allocator, &.{ repo_path, file });
+                defer allocator.free(abs_file);
+                try global_map.addFile(tag, abs_file);
+            }
+        }
+
+        stats.repos_processed += 1;
+    }
+
+    stats.tags_written = global_map.map.count();
+
+    var file_count: usize = 0;
+    var global_it = global_map.map.iterator();
+    while (global_it.next()) |entry| {
+        file_count += entry.value_ptr.items.len;
+    }
+    stats.files_indexed = file_count;
+
+    try writeGlobalIndexesAuthoritative(allocator, &global_map, global_art_path, stdout, quiet);
+
+    return stats;
+}
+
+/// Write content to a file, overwriting if it exists.
+/// Note: This is not atomic (no temp file + rename). For ligi's use case
+/// (regenerating indexes that can be rebuilt), this is acceptable.
+fn writeFile(path: []const u8, content: []const u8) !void {
     const file = std.fs.cwd().createFile(path, .{}) catch |err| {
         std.debug.print("error: cannot write index file: {s}: {s}\n", .{ path, @errorName(err) });
         return err;
@@ -1278,7 +1707,7 @@ test "index --file preserves other tags" {
     var dir = tmp.dir();
     try dir.makePath("art");
 
-    const writeFile = struct {
+    const writeTestFile = struct {
         fn write(dir_handle: std.fs.Dir, path: []const u8, content: []const u8) !void {
             var file = try dir_handle.createFile(path, .{ .truncate = true });
             defer file.close();
@@ -1286,8 +1715,8 @@ test "index --file preserves other tags" {
         }
     }.write;
 
-    try writeFile(dir, "art/a.md", "[[t/alpha]]\n");
-    try writeFile(dir, "art/b.md", "[[t/beta]]\n");
+    try writeTestFile(dir, "art/a.md", "[[t/alpha]]\n");
+    try writeTestFile(dir, "art/b.md", "[[t/beta]]\n");
 
     const art_path = try std.fs.path.join(allocator, &.{ tmp.path, "art" });
     defer allocator.free(art_path);
@@ -1297,7 +1726,7 @@ test "index --file preserves other tags" {
     _ = try writeLocalIndexes(allocator, art_path, &tag_map, std.io.null_writer, true);
 
     // Update a.md and index only that file
-    try writeFile(dir, "art/a.md", "[[t/gamma]]\n");
+    try writeTestFile(dir, "art/a.md", "[[t/gamma]]\n");
 
     var incremental = try loadTagMapFromIndexes(allocator, art_path, std.io.null_writer);
     defer incremental.deinit();
@@ -1335,4 +1764,293 @@ test "index --file preserves other tags" {
         allocator.free(alpha_files);
     }
     try std.testing.expectEqual(@as(usize, 0), alpha_files.len);
+}
+
+test "pruneLocalTagIndexes removes broken entries and tags" {
+    const allocator = std.testing.allocator;
+    const fixtures = @import("../testing/fixtures.zig");
+
+    var tmp = try fixtures.TempDir.create(allocator);
+    defer tmp.cleanup();
+
+    var dir = tmp.dir();
+    try dir.makePath("repo/art/index/tags");
+
+    const writeTestFile = struct {
+        fn write(dir_handle: std.fs.Dir, path: []const u8, content: []const u8) !void {
+            var file = try dir_handle.createFile(path, .{ .truncate = true });
+            defer file.close();
+            try file.writeAll(content);
+        }
+    }.write;
+
+    try writeTestFile(dir, "repo/art/a.md", "[[t/alpha]]\n");
+    try writeTestFile(dir, "repo/art/b.md", "[[t/beta]]\n");
+
+    const tag_list =
+        \\# Ligi Tag Index
+        \\
+        \\This file is auto-maintained by ligi. Each tag links to its index file.
+        \\
+        \\## Tags
+        \\
+        \\- [alpha](tags/alpha.md)
+        \\- [beta](tags/beta.md)
+        \\- [gamma](tags/gamma.md)
+        \\
+    ;
+    try writeTestFile(dir, "repo/art/index/ligi_tags.md", tag_list);
+
+    const alpha_content = try renderPerTagIndex(allocator, "alpha", &[_][]const u8{
+        "art/a.md",
+        "art/missing.md",
+        "outside.md",
+    });
+    defer allocator.free(alpha_content);
+    try writeTestFile(dir, "repo/art/index/tags/alpha.md", alpha_content);
+
+    const beta_content = try renderPerTagIndex(allocator, "beta", &[_][]const u8{ "art/b.md" });
+    defer allocator.free(beta_content);
+    try writeTestFile(dir, "repo/art/index/tags/beta.md", beta_content);
+
+    const art_path = try std.fs.path.join(allocator, &.{ tmp.path, "repo", "art" });
+    defer allocator.free(art_path);
+
+    const result = try pruneLocalTagIndexes(allocator, art_path, std.io.null_writer);
+    try std.testing.expectEqual(@as(usize, 2), result.pruned_entries);
+    try std.testing.expectEqual(@as(usize, 1), result.pruned_tags);
+
+    const alpha_index = try std.fs.path.join(allocator, &.{ art_path, "index", "tags", "alpha.md" });
+    defer allocator.free(alpha_index);
+    const alpha_files = try readTagIndex(allocator, alpha_index);
+    defer {
+        for (alpha_files) |f| allocator.free(f);
+        allocator.free(alpha_files);
+    }
+    try std.testing.expectEqual(@as(usize, 1), alpha_files.len);
+    try std.testing.expectEqualStrings("art/a.md", alpha_files[0]);
+
+    const tag_index_path = try std.fs.path.join(allocator, &.{ art_path, "index", "ligi_tags.md" });
+    defer allocator.free(tag_index_path);
+    const tag_content = switch (fs.readFile(allocator, tag_index_path)) {
+        .ok => |c| c,
+        .err => return error.TestExpectedEqual,
+    };
+    defer allocator.free(tag_content);
+    try std.testing.expect(std.mem.indexOf(u8, tag_content, "gamma") == null);
+}
+
+test "pruneGlobalTagIndexes removes missing repo entries" {
+    const allocator = std.testing.allocator;
+    const fixtures = @import("../testing/fixtures.zig");
+
+    var tmp = try fixtures.TempDir.create(allocator);
+    defer tmp.cleanup();
+
+    var dir = tmp.dir();
+    try dir.makePath("repo1/art");
+    try dir.makePath("repo2/art");
+    try dir.makePath("global_art/index/tags");
+
+    const writeTestFile = struct {
+        fn write(dir_handle: std.fs.Dir, path: []const u8, content: []const u8) !void {
+            var file = try dir_handle.createFile(path, .{ .truncate = true });
+            defer file.close();
+            try file.writeAll(content);
+        }
+    }.write;
+
+    try writeTestFile(dir, "repo1/art/a.md", "[[t/alpha]]\n");
+    try writeTestFile(dir, "repo2/art/b.md", "[[t/beta]]\n");
+
+    const repo1_path = try std.fs.path.join(allocator, &.{ tmp.path, "repo1" });
+    defer allocator.free(repo1_path);
+    const repo2_path = try std.fs.path.join(allocator, &.{ tmp.path, "repo2" });
+    defer allocator.free(repo2_path);
+    const global_art_path = try std.fs.path.join(allocator, &.{ tmp.path, "global_art" });
+    defer allocator.free(global_art_path);
+
+    const repo1_file = try std.fs.path.join(allocator, &.{ repo1_path, "art", "a.md" });
+    defer allocator.free(repo1_file);
+    const repo2_file = try std.fs.path.join(allocator, &.{ repo2_path, "art", "b.md" });
+    defer allocator.free(repo2_file);
+
+    const tag_list =
+        \\# Ligi Tag Index
+        \\
+        \\This file is auto-maintained by ligi. Each tag links to its index file.
+        \\
+        \\## Tags
+        \\
+        \\- [alpha](tags/alpha.md)
+        \\- [beta](tags/beta.md)
+        \\
+    ;
+    try writeTestFile(dir, "global_art/index/ligi_tags.md", tag_list);
+
+    const alpha_content = try renderPerTagIndex(allocator, "alpha", &[_][]const u8{
+        repo1_file,
+        repo2_file,
+    });
+    defer allocator.free(alpha_content);
+    try writeTestFile(dir, "global_art/index/tags/alpha.md", alpha_content);
+
+    const beta_content = try renderPerTagIndex(allocator, "beta", &[_][]const u8{ repo2_file });
+    defer allocator.free(beta_content);
+    try writeTestFile(dir, "global_art/index/tags/beta.md", beta_content);
+
+    const result = try pruneGlobalTagIndexes(allocator, global_art_path, &.{repo1_path}, std.io.null_writer);
+    try std.testing.expectEqual(@as(usize, 2), result.pruned_entries);
+    try std.testing.expectEqual(@as(usize, 1), result.pruned_tags);
+
+    const alpha_index = try std.fs.path.join(allocator, &.{ global_art_path, "index", "tags", "alpha.md" });
+    defer allocator.free(alpha_index);
+    const alpha_files = try readTagIndex(allocator, alpha_index);
+    defer {
+        for (alpha_files) |f| allocator.free(f);
+        allocator.free(alpha_files);
+    }
+    try std.testing.expectEqual(@as(usize, 1), alpha_files.len);
+    try std.testing.expectEqualStrings(repo1_file, alpha_files[0]);
+
+    const tag_index_path = try std.fs.path.join(allocator, &.{ global_art_path, "index", "ligi_tags.md" });
+    defer allocator.free(tag_index_path);
+    const tag_content = switch (fs.readFile(allocator, tag_index_path)) {
+        .ok => |c| c,
+        .err => return error.TestExpectedEqual,
+    };
+    defer allocator.free(tag_content);
+    try std.testing.expect(std.mem.indexOf(u8, tag_content, "beta") == null);
+}
+
+test "rebuildGlobalTagIndexesFromRepos builds global and local indexes" {
+    const allocator = std.testing.allocator;
+    const fixtures = @import("../testing/fixtures.zig");
+
+    var tmp = try fixtures.TempDir.create(allocator);
+    defer tmp.cleanup();
+
+    var dir = tmp.dir();
+    try dir.makePath("repo1/art");
+    try dir.makePath("repo2/art");
+
+    const writeTestFile = struct {
+        fn write(dir_handle: std.fs.Dir, path: []const u8, content: []const u8) !void {
+            var file = try dir_handle.createFile(path, .{ .truncate = true });
+            defer file.close();
+            try file.writeAll(content);
+        }
+    }.write;
+
+    try writeTestFile(dir, "repo1/art/a.md", "[[t/alpha]] [[t/shared]]\n");
+    try writeTestFile(dir, "repo2/art/b.md", "[[t/beta]] [[t/shared]]\n");
+
+    const repo1_path = try std.fs.path.join(allocator, &.{ tmp.path, "repo1" });
+    defer allocator.free(repo1_path);
+    const repo2_path = try std.fs.path.join(allocator, &.{ tmp.path, "repo2" });
+    defer allocator.free(repo2_path);
+    const global_art_path = try std.fs.path.join(allocator, &.{ tmp.path, "global_art" });
+    defer allocator.free(global_art_path);
+
+    const stats = try rebuildGlobalTagIndexesFromRepos(
+        allocator,
+        &.{ repo1_path, repo2_path },
+        global_art_path,
+        true,
+        false,
+        &.{},
+        std.io.null_writer,
+        std.io.null_writer,
+        true,
+    );
+
+    try std.testing.expectEqual(@as(usize, 2), stats.repos_processed);
+    try std.testing.expectEqual(@as(usize, 3), stats.tags_written);
+    try std.testing.expectEqual(@as(usize, 4), stats.files_indexed);
+
+    const tag_index_path = try std.fs.path.join(allocator, &.{ global_art_path, "index", "ligi_tags.md" });
+    defer allocator.free(tag_index_path);
+    const tag_content = switch (fs.readFile(allocator, tag_index_path)) {
+        .ok => |c| c,
+        .err => return error.TestExpectedEqual,
+    };
+    defer allocator.free(tag_content);
+    try std.testing.expect(std.mem.indexOf(u8, tag_content, "alpha") != null);
+    try std.testing.expect(std.mem.indexOf(u8, tag_content, "beta") != null);
+    try std.testing.expect(std.mem.indexOf(u8, tag_content, "shared") != null);
+    const alpha_pos = std.mem.indexOf(u8, tag_content, "alpha").?;
+    const beta_pos = std.mem.indexOf(u8, tag_content, "beta").?;
+    const shared_pos = std.mem.indexOf(u8, tag_content, "shared").?;
+    try std.testing.expect(alpha_pos < beta_pos);
+    try std.testing.expect(beta_pos < shared_pos);
+
+    const shared_path = try std.fs.path.join(allocator, &.{ global_art_path, "index", "tags", "shared.md" });
+    defer allocator.free(shared_path);
+    const shared_content = switch (fs.readFile(allocator, shared_path)) {
+        .ok => |c| c,
+        .err => return error.TestExpectedEqual,
+    };
+    defer allocator.free(shared_content);
+    const repo1_file = try std.fs.path.join(allocator, &.{ repo1_path, "art", "a.md" });
+    defer allocator.free(repo1_file);
+    const repo2_file = try std.fs.path.join(allocator, &.{ repo2_path, "art", "b.md" });
+    defer allocator.free(repo2_file);
+    try std.testing.expect(std.mem.indexOf(u8, shared_content, repo1_file) != null);
+    try std.testing.expect(std.mem.indexOf(u8, shared_content, repo2_file) != null);
+    const repo1_pos = std.mem.indexOf(u8, shared_content, repo1_file).?;
+    const repo2_pos = std.mem.indexOf(u8, shared_content, repo2_file).?;
+    if (std.mem.order(u8, repo1_file, repo2_file) == .lt) {
+        try std.testing.expect(repo1_pos < repo2_pos);
+    } else {
+        try std.testing.expect(repo2_pos < repo1_pos);
+    }
+
+    const repo1_local_index = try std.fs.path.join(allocator, &.{ repo1_path, "art", "index", "ligi_tags.md" });
+    defer allocator.free(repo1_local_index);
+    try std.testing.expect(fs.fileExists(repo1_local_index));
+    const repo2_local_index = try std.fs.path.join(allocator, &.{ repo2_path, "art", "index", "ligi_tags.md" });
+    defer allocator.free(repo2_local_index);
+    try std.testing.expect(fs.fileExists(repo2_local_index));
+}
+
+test "rebuildGlobalTagIndexesFromRepos respects no-local" {
+    const allocator = std.testing.allocator;
+    const fixtures = @import("../testing/fixtures.zig");
+
+    var tmp = try fixtures.TempDir.create(allocator);
+    defer tmp.cleanup();
+
+    var dir = tmp.dir();
+    try dir.makePath("repo/art");
+
+    const writeTestFile = struct {
+        fn write(dir_handle: std.fs.Dir, path: []const u8, content: []const u8) !void {
+            var file = try dir_handle.createFile(path, .{ .truncate = true });
+            defer file.close();
+            try file.writeAll(content);
+        }
+    }.write;
+
+    try writeTestFile(dir, "repo/art/a.md", "[[t/alpha]]\n");
+
+    const repo_path = try std.fs.path.join(allocator, &.{ tmp.path, "repo" });
+    defer allocator.free(repo_path);
+    const global_art_path = try std.fs.path.join(allocator, &.{ tmp.path, "global_art" });
+    defer allocator.free(global_art_path);
+
+    _ = try rebuildGlobalTagIndexesFromRepos(
+        allocator,
+        &.{repo_path},
+        global_art_path,
+        false,
+        false,
+        &.{},
+        std.io.null_writer,
+        std.io.null_writer,
+        true,
+    );
+
+    const repo_local_index = try std.fs.path.join(allocator, &.{ repo_path, "art", "index", "ligi_tags.md" });
+    defer allocator.free(repo_local_index);
+    try std.testing.expect(!fs.fileExists(repo_local_index));
 }

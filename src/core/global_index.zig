@@ -104,6 +104,42 @@ pub const GlobalIndex = struct {
     }
 };
 
+/// Remove broken repo entries from a GlobalIndex in-place.
+/// Returns the number of entries removed.
+pub fn pruneIndexEntries(index: *GlobalIndex) usize {
+    var pruned: usize = 0;
+    var idx: usize = 0;
+
+    while (idx < index.repos.items.len) {
+        const repo_path = index.repos.items[idx];
+        if (!fs.dirExists(repo_path)) {
+            index.allocator.free(repo_path);
+            _ = index.repos.orderedRemove(idx);
+            pruned += 1;
+            continue;
+        }
+
+        const art_path = std.fs.path.join(index.allocator, &.{ repo_path, "art" }) catch {
+            index.allocator.free(repo_path);
+            _ = index.repos.orderedRemove(idx);
+            pruned += 1;
+            continue;
+        };
+        defer index.allocator.free(art_path);
+
+        if (!fs.dirExists(art_path)) {
+            index.allocator.free(repo_path);
+            _ = index.repos.orderedRemove(idx);
+            pruned += 1;
+            continue;
+        }
+
+        idx += 1;
+    }
+
+    return pruned;
+}
+
 /// Parse a global index file from its content
 pub fn parseGlobalIndex(allocator: std.mem.Allocator, content: []const u8) !GlobalIndex {
     var index = GlobalIndex.init(allocator);
@@ -340,6 +376,37 @@ test "GlobalIndex addRepo adds new path" {
     try std.testing.expectEqual(@as(usize, 1), index.repos.items.len);
 }
 
+test "pruneIndexEntries removes missing repos or art dirs" {
+    const allocator = std.testing.allocator;
+    const fixtures = @import("../testing/fixtures.zig");
+
+    var tmp = try fixtures.TempDir.create(allocator);
+    defer tmp.cleanup();
+
+    var dir = tmp.dir();
+    try dir.makePath("repo_ok/art");
+    try dir.makePath("repo_no_art");
+
+    const repo_ok = try std.fs.path.join(allocator, &.{ tmp.path, "repo_ok" });
+    defer allocator.free(repo_ok);
+    const repo_no_art = try std.fs.path.join(allocator, &.{ tmp.path, "repo_no_art" });
+    defer allocator.free(repo_no_art);
+    const repo_missing = try std.fs.path.join(allocator, &.{ tmp.path, "repo_missing" });
+    defer allocator.free(repo_missing);
+
+    var index = GlobalIndex.init(allocator);
+    defer index.deinit();
+
+    _ = try index.addRepo(repo_ok);
+    _ = try index.addRepo(repo_no_art);
+    _ = try index.addRepo(repo_missing);
+
+    const pruned = pruneIndexEntries(&index);
+    try std.testing.expectEqual(@as(usize, 2), pruned);
+    try std.testing.expectEqual(@as(usize, 1), index.repos.items.len);
+    try std.testing.expectEqualStrings(repo_ok, index.repos.items[0]);
+}
+
 test "GlobalIndex addRepo is idempotent" {
     const allocator = std.testing.allocator;
     var index = GlobalIndex.init(allocator);
@@ -463,4 +530,39 @@ test "canonicalizePath resolves relative paths" {
     defer allocator.free(result);
 
     try std.testing.expectEqualStrings(cwd, result);
+}
+
+test "pruneIndexEntries removes dangling symlinks" {
+    // Dangling symlinks are treated as broken (path does not resolve)
+    const allocator = std.testing.allocator;
+    const fixtures = @import("../testing/fixtures.zig");
+
+    var tmp = try fixtures.TempDir.create(allocator);
+    defer tmp.cleanup();
+
+    var dir = tmp.dir();
+    try dir.makePath("repo_ok/art");
+
+    // Create a dangling symlink as a "repo"
+    dir.symLink("/nonexistent/target", "dangling_repo", .{}) catch |err| {
+        // Skip test if symlinks not supported
+        if (err == error.AccessDenied) return;
+        return err;
+    };
+
+    const repo_ok = try std.fs.path.join(allocator, &.{ tmp.path, "repo_ok" });
+    defer allocator.free(repo_ok);
+    const dangling = try std.fs.path.join(allocator, &.{ tmp.path, "dangling_repo" });
+    defer allocator.free(dangling);
+
+    var index = GlobalIndex.init(allocator);
+    defer index.deinit();
+
+    _ = try index.addRepo(repo_ok);
+    _ = try index.addRepo(dangling);
+
+    const pruned = pruneIndexEntries(&index);
+    try std.testing.expectEqual(@as(usize, 1), pruned);
+    try std.testing.expectEqual(@as(usize, 1), index.repos.items.len);
+    try std.testing.expectEqualStrings(repo_ok, index.repos.items[0]);
 }

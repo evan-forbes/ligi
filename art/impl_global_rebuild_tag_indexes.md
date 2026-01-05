@@ -4,6 +4,12 @@
 
 This document specifies a full rebuild of global tag indexes under `~/.ligi/art/index/`, using all repos listed in the global index. The rebuild produces authoritative tag lists and per-tag files, and can optionally refresh each repo's local tag indexes.
 
+## Related Documents
+
+- [Tagging System Implementation Plan](impl_tagging_system.md)
+- [Global Index Implementation Plan](impl_global_index.md)
+- [Pruning Broken Links Plan](impl_pruning_broken_links.md)
+
 ---
 
 ## Part 1: Decisions (Finalized)
