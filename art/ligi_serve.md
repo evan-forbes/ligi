@@ -59,9 +59,9 @@ src/
     ├── app.js
     ├── styles.css
     └── vendor/
-        ├── markdown-it.min.js
-        ├── markdown-it-gfm.min.js
-        └── mermaid.min.js
+        ├── marked.min.js
+        ├── mermaid.min.js
+        └── NOTICE.md
 ```
 
 ### 3) HTTP Endpoints
@@ -79,15 +79,15 @@ Optional: `GET /api/health` -> `200 ok` for testability.
 - `app.js`:
   - Fetches `GET /api/list` to populate a sidebar file list.
   - Fetches `GET /api/file?path=...` when a file is selected.
-  - Renders Markdown via `markdown-it` configured for GFM.
-  - Converts fenced mermaid blocks into `<div class="mermaid">...</div>`.
-  - Calls `mermaid.initialize({ startOnLoad: false })` once, then `mermaid.run()` on updates.
+  - Renders Markdown via `marked.js` configured for GFM.
+  - Intercepts mermaid code blocks during rendering to output `<div class="mermaid">...</div>`.
+  - Calls `mermaid.run()` to render the diagrams.
 
 Suggested JS flow (high-level):
-1. `loadList()` -> render list.
-2. `loadDoc(path)` -> fetch raw markdown.
-3. `renderMarkdown(text)` -> `md.render(text)`.
-4. `renderMermaid()` -> scan for `code.language-mermaid` fences, replace with `div.mermaid`.
+1. `init()` -> load list.
+2. `loadFile(path)` -> fetch raw markdown.
+3. `renderMarkdown(text)` -> `marked.parse(text)`.
+4. `renderMermaid()` -> `mermaid.run({ nodes: ... })`.
 5. Update `document.title` to file name.
 
 ---
@@ -136,7 +136,7 @@ Suggested JS flow (high-level):
 
 - Bundle minified vendor assets under `src/serve/assets/vendor/`.
   - **Action:** Download specific versions manually (e.g., from cdnjs or npm) and commit them to the repo.
-  - Recommended: `markdown-it` (v14+), `markdown-it-gfm`, and `mermaid` (v10+).
+  - Recommended: `marked` (v4+), and `mermaid` (v10+).
 - Use `@embedFile` in `src/serve/assets.zig` to embed assets into the binary.
 - Ensure licenses are preserved in a `src/serve/assets/vendor/NOTICE.md` if required.
 - Avoid CDN dependencies to keep offline behavior consistent.
