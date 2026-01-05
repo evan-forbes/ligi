@@ -1,3 +1,5 @@
+[[t/DONE]]
+
 # Ligi `init` Command Implementation Plan
 
 ## Executive Summary

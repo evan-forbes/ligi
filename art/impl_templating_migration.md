@@ -1,3 +1,5 @@
+[[t/DONE]]
+
 # Ligi Templating Migration Plan
 
 ## Executive Summary

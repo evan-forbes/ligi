@@ -1,3 +1,5 @@
+[[t/DONE]]
+
 # Ligi Global Index Implementation Plan
 
 ## Executive Summary

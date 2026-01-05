@@ -1,3 +1,5 @@
+[[t/DONE]]
+
 # Ligi Tagging System Implementation Plan
 
 ## Executive Summary

@@ -1,3 +1,5 @@
+[[t/TODO]]
+
 # Implementation Plan: `ligi q g` (Graph Query)
 
 ## Goal

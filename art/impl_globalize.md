@@ -1,3 +1,5 @@
+[[t/DONE]]
+
 # Short Implementation Plan: globalize command
 
 ## Summary
