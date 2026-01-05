@@ -27,7 +27,6 @@ pub const Template = struct {
 pub const ParseError = error{
     MissingFrontmatterStart,
     MissingTomlBlock,
-    MissingFrontmatterEnd,
     InvalidFieldFormat,
     InvalidType,
     OutOfMemory,
@@ -36,20 +35,40 @@ pub const ParseError = error{
     InvalidValue,
 };
 
+/// Find the first markdown heading (# at start of line).
+/// Returns null if no heading found.
+fn findFirstHeading(input: []const u8) ?usize {
+    // Check if document starts with #
+    if (input.len > 0 and input[0] == '#') {
+        return 0;
+    }
+
+    // Look for \n# pattern
+    var i: usize = 0;
+    while (i < input.len) : (i += 1) {
+        if (input[i] == '\n' and i + 1 < input.len and input[i + 1] == '#') {
+            return i + 1;
+        }
+    }
+    return null;
+}
+
 pub fn parse(allocator: std.mem.Allocator, input: []const u8) !Template {
-    // 1. Find "# front"
-    const front_idx = std.mem.indexOf(u8, input, "# front") orelse return ParseError.MissingFrontmatterStart;
-
-    // 2. Find "```toml" after front
-    const toml_start_search = input[front_idx..];
     const code_block_start_marker = "```toml";
-    const cb_start_idx = std.mem.indexOf(u8, toml_start_search, code_block_start_marker) orelse return ParseError.MissingTomlBlock;
 
-    // Absolute index of start of ```toml
-    const abs_cb_start = front_idx + cb_start_idx;
-    // Content starts after ```toml\n (or just ```toml)
-    // We scan for newline after ```toml
-    var content_start = abs_cb_start + code_block_start_marker.len;
+    // 1. Find ```toml block
+    const cb_start_idx = std.mem.indexOf(u8, input, code_block_start_marker) orelse return ParseError.MissingTomlBlock;
+
+    // 2. Check that no heading (#) appears before the toml block
+    // A heading is a # at the start of a line (not inside code)
+    if (findFirstHeading(input)) |heading_idx| {
+        if (heading_idx < cb_start_idx) {
+            return ParseError.MissingFrontmatterStart; // toml block is after a heading, not frontmatter
+        }
+    }
+
+    // Content starts after ```toml\n
+    var content_start = cb_start_idx + code_block_start_marker.len;
     while (content_start < input.len and input[content_start] != '\n') : (content_start += 1) {}
     if (content_start < input.len) content_start += 1; // skip \n
 
@@ -60,12 +79,8 @@ pub fn parse(allocator: std.mem.Allocator, input: []const u8) !Template {
 
     const toml_content = input[content_start..abs_cb_end];
 
-    // 4. Find "# Document"
-    const doc_marker = "# Document";
-    const doc_idx = std.mem.indexOf(u8, input, doc_marker) orelse return ParseError.MissingFrontmatterEnd;
-
-    // Body starts after # Document line
-    var body_start = doc_idx + doc_marker.len;
+    // 4. Body starts after the closing ``` line
+    var body_start = abs_cb_end + 3; // skip ```
     while (body_start < input.len and input[body_start] != '\n') : (body_start += 1) {}
     if (body_start < input.len) body_start += 1; // skip \n
 
@@ -170,15 +185,13 @@ pub fn parse(allocator: std.mem.Allocator, input: []const u8) !Template {
 
 test "parser valid toml" {
     const input =
-        \\# front
-        \\
         \\```toml
         \\name = "Alice"
         \\age = { type = "int", default = 30 }
         \\role = { type = "string" }
         \\```
         \\
-        \\# Document
+        \\# My Document
         \\
         \\Hello {{name}}, you are {{age}}.
     ;
@@ -213,20 +226,18 @@ test "parser valid toml" {
     try std.testing.expect(found_age);
     try std.testing.expect(found_role);
 
-    try std.testing.expectEqualStrings("\nHello {{name}}, you are {{age}}.", template.body);
+    try std.testing.expectEqualStrings("\n# My Document\n\nHello {{name}}, you are {{age}}.", template.body);
 }
 
 test "parser section style" {
     const input =
-        \\# front
-        \\
         \\```toml
         \\[user]
         \\type = "string"
         \\default = "Bob"
         \\```
         \\
-        \\# Document
+        \\# Greeting
         \\Hi
     ;
     const template = try parse(std.testing.allocator, input);
@@ -236,4 +247,19 @@ test "parser section style" {
     try std.testing.expectEqualStrings("user", template.fields[0].name);
     try std.testing.expectEqualStrings("string", template.fields[0].type_name);
     try std.testing.expectEqualStrings("Bob", template.fields[0].default_value.?);
+    try std.testing.expectEqualStrings("\n# Greeting\nHi", template.body);
+}
+
+test "parser rejects toml after heading" {
+    const input =
+        \\# Title First
+        \\
+        \\```toml
+        \\name = "Alice"
+        \\```
+        \\
+        \\Body text
+    ;
+    const result = parse(std.testing.allocator, input);
+    try std.testing.expectError(ParseError.MissingFrontmatterStart, result);
 }

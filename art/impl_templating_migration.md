@@ -16,7 +16,7 @@ This document is the step‑by‑step implementation plan to migrate the existin
 | 4 | Missing path behavior | Start `fzf` search from `$HOME` |
 | 5 | If `fzf` missing | Fail with actionable error (install or provide path) |
 | 6 | Output | Always stdout; optional clipboard with `-c`/`--clipboard` |
-| 7 | Template format | TOML frontmatter with `# front` / `# Document` markers |
+| 7 | Template format | TOML frontmatter in ` ```toml ` block before first heading |
 | 8 | Include syntax | `!![Label](./path.md)` with recursion limit 10 |
 
 ---
@@ -449,8 +449,8 @@ Use consistent error messages matching existing ligi patterns:
 | Scenario | Error Message |
 |----------|---------------|
 | Template file not found | `error: cannot resolve path '<path>': FileNotFound` |
-| Missing `# front` marker | `error: template missing '# front' marker` |
-| Missing `# Document` marker | `error: template missing '# Document' marker` |
+| No ` ```toml ` block found | `error: template missing frontmatter (no toml block found)` |
+| TOML block appears after a heading | `error: frontmatter must appear before the first heading` |
 | Invalid TOML in frontmatter | `error: invalid frontmatter: <toml error>` |
 | Include file not found | `error: include not found: '<path>'` |
 | Recursion limit exceeded | `error: include recursion limit (10) exceeded` |
@@ -520,29 +520,27 @@ When using fzf (no path provided), it searches `$HOME` for all `.md` files, so b
 Create these test fixtures for smoke tests:
 
 **`art/template/prompt.md`** (basic template):
-```markdown
-# front
-[vars]
-name = { type = "string", default = "World" }
-count = { type = "int", default = "42" }
 
-# Document
-Hello, {{ name }}!
+    ```toml
+    name = { type = "string", default = "World" }
+    count = { type = "int", default = 42 }
+    ```
 
-You have {{ count }} items.
-```
+    # Hello Template
+
+    Hello, {{ name }}!
+
+    You have {{ count }} items.
 
 **`art/template/with_include.md`** (tests include syntax):
-```markdown
-# front
-[vars]
-title = { type = "string" }
 
-# Document
-# {{ title }}
+    ```toml
+    title = { type = "string" }
+    ```
 
-!![Common Footer](./footer.md)
-```
+    # {{ title }}
+
+    !![Common Footer](./footer.md)
 
 **`art/template/footer.md`** (included file):
 ```markdown
