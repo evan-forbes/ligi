@@ -32,9 +32,57 @@ pub const INITIAL_ART_README =
     \\- `config/`   Ligi config (e.g., `ligi.toml`)
     \\- `archive/`  soft-delete area for retired docs
     \\
+    \\Docs:
+    \\- `ligi_art.md` explains the art directory
+    \\- `ligi_templates.md` explains templates
+    \\
     \\Please treat `art/` as durable project context. Avoid deleting or moving files
     \\here unless explicitly requested; prefer `archive/` for cleanup. See
     \\`art/founding_idea.md` for design intent.
+    \\
+;
+
+/// Initial content for art/ligi_art.md
+pub const INITIAL_LIGI_ART_DOC =
+    \\# Ligi Art Directory
+    \\
+    \\`art/` is the durable Ligi artifact store (repo) and `~/.ligi/art` (global). It
+    \\holds human/LLM context and is meant to live in git.
+    \\
+    \\Core areas:
+    \\- `index/` auto-maintained tag/link indexes
+    \\- `template/` reusable templates
+    \\- `config/` ligi config
+    \\- `archive/` retired docs
+    \\
+    \\Guidelines:
+    \\- Add notes, plans, logs, and other context here.
+    \\- Avoid delete/move; archive instead.
+    \\
+;
+
+/// Initial content for art/ligi_templates.md
+pub const INITIAL_LIGI_TEMPLATES_DOC =
+    \\# Ligi Templates
+    \\
+    \\A template is markdown with a top ` ```toml ` block (before any heading) that
+    \\declares fields, then the body.
+    \\
+    \\Example fields:
+    \\```toml
+    \\name = "Alice"
+    \\age = 30
+    \\role = { type = "string" }
+    \\```
+    \\
+    \\Usage:
+    \\- `{{ name }}` substitutes values.
+    \\- `!![label](path)` includes a file (path relative to template file). If the
+    \\  included file has `# front`...`# Document` or `---` frontmatter, it is stripped.
+    \\  Max include depth: 10.
+    \\
+    \\CLI: `ligi template fill [path]` (or `ligi t f`). `--clipboard` copies output.
+    \\No path opens `fzf`.
     \\
 ;
 
@@ -42,13 +90,12 @@ pub const INITIAL_ART_README =
 pub const INITIAL_AGENTS =
     \\# Ligi Agent Notes
     \\
-    \\The `art/` directory is the repository's Ligi artifact store, initialized by
-    \\`ligi init`. It contains human/LLM notes, indexes, templates, config, and
-    \\archive data that are part of the project's durable context.
+    \\`art/` is the durable Ligi artifact store created by `ligi init`.
     \\
-    \\Do not delete or move files under `art/` unless explicitly requested. If
-    \\something should be retired, use `art/archive/` or the future `ligi archive`
-    \\command instead. See `art/founding_idea.md` for the intended purpose.
+    \\Do not delete or move files under `art/` unless explicitly asked; archive instead
+    \\(`art/archive/`). See `art/ligi_art.md` and `art/founding_idea.md`.
+    \\
+    \\Optional: run `scripts/install_git_hooks.sh` to block `art/` deletions.
     \\
 ;
 
@@ -144,12 +191,21 @@ pub fn run(
     defer allocator.free(art_readme_path);
     try createFileTracked(allocator, art_readme_path, INITIAL_ART_README, &result);
 
-    // 3. AGENTS.md in base path
+    // 3. Art docs in art/
+    const art_doc_path = try paths.joinPath(allocator, &.{ art_path, "ligi_art.md" });
+    defer allocator.free(art_doc_path);
+    try createFileTracked(allocator, art_doc_path, INITIAL_LIGI_ART_DOC, &result);
+
+    const templates_doc_path = try paths.joinPath(allocator, &.{ art_path, "ligi_templates.md" });
+    defer allocator.free(templates_doc_path);
+    try createFileTracked(allocator, templates_doc_path, INITIAL_LIGI_TEMPLATES_DOC, &result);
+
+    // 4. AGENTS.md in base path
     const agents_path = try paths.joinPath(allocator, &.{ base_path, "AGENTS.md" });
     defer allocator.free(agents_path);
     try createFileTracked(allocator, agents_path, INITIAL_AGENTS, &result);
 
-    // 4. Config file
+    // 5. Config file
     var config_dir: []const u8 = undefined;
     var config_dir_allocated = false;
     defer if (config_dir_allocated) allocator.free(config_dir);
@@ -255,6 +311,14 @@ test "INITIAL_TAGS_INDEX contains Tags section" {
 
 test "INITIAL_ART_README contains header" {
     try std.testing.expect(std.mem.indexOf(u8, INITIAL_ART_README, "# art/ (Ligi artifacts)") != null);
+}
+
+test "INITIAL_LIGI_ART_DOC contains header" {
+    try std.testing.expect(std.mem.indexOf(u8, INITIAL_LIGI_ART_DOC, "# Ligi Art Directory") != null);
+}
+
+test "INITIAL_LIGI_TEMPLATES_DOC contains header" {
+    try std.testing.expect(std.mem.indexOf(u8, INITIAL_LIGI_TEMPLATES_DOC, "# Ligi Templates") != null);
 }
 
 test "INITIAL_AGENTS contains header" {
