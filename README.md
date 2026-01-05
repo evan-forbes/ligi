@@ -1,5 +1,7 @@
 # ligi
 
+> pronounced LEE-ghee, ligi is Esperanto for the verb "to link, connect, or tie"
+
 A CLI tool for managing project artifacts as plain markdown. Replaces Obsidian-style document linking and GitHub project management with a git-native, LLM-friendly system.
 
 ## Why
