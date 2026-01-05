@@ -35,6 +35,7 @@ pub const INITIAL_ART_README =
     \\Docs:
     \\- `ligi_art.md` explains the art directory
     \\- `ligi_templates.md` explains templates
+    \\- `ligi_tags.md` explains tags
     \\
     \\Related directories:
     \\- [media](../media/README.md) - images and diagrams for markdown docs
@@ -87,6 +88,44 @@ pub const INITIAL_LIGI_TEMPLATES_DOC =
     \\
     \\CLI: `ligi template fill [path]` (or `ligi t f`). `--clipboard` copies output.
     \\No path opens `fzf`.
+    \\
+;
+
+/// Initial content for art/ligi_tags.md
+pub const INITIAL_LIGI_TAGS_DOC =
+    \\# Ligi Tags
+    \\
+    \\Tags are wiki-style markers that let you categorize and query documents.
+    \\
+    \\## Syntax
+    \\
+    \\`[[t/tag_name]]` — place anywhere in markdown.
+    \\
+    \\Nested paths work: `[[t/project/release/v1.0]]`
+    \\
+    \\Allowed characters: `A-Za-z0-9_-./`
+    \\
+    \\## What's Ignored
+    \\
+    \\Tags inside these are skipped:
+    \\- Fenced code blocks (```)
+    \\- Inline code (`backticks`)
+    \\- HTML comments (`<!-- -->`)
+    \\
+    \\## Commands
+    \\
+    \\```bash
+    \\ligi index                # rebuild tag indexes
+    \\ligi query t planning     # files with [[t/planning]]
+    \\ligi q t bug & urgent     # AND query
+    \\ligi q t bug | urgent     # OR query
+    \\```
+    \\
+    \\## Index Structure
+    \\
+    \\After `ligi index`, indexes appear in `art/index/`:
+    \\- `ligi_tags.md` — master list of all tags
+    \\- `tags/tag_name.md` — files containing each tag
     \\
 ;
 
@@ -232,6 +271,10 @@ pub fn run(
     defer allocator.free(templates_doc_path);
     try createFileTracked(allocator, templates_doc_path, INITIAL_LIGI_TEMPLATES_DOC, &result);
 
+    const tags_doc_path = try paths.joinPath(allocator, &.{ art_path, "ligi_tags.md" });
+    defer allocator.free(tags_doc_path);
+    try createFileTracked(allocator, tags_doc_path, INITIAL_LIGI_TAGS_DOC, &result);
+
     // 4. AGENTS.md in base path
     const agents_path = try paths.joinPath(allocator, &.{ base_path, "AGENTS.md" });
     defer allocator.free(agents_path);
@@ -369,6 +412,10 @@ test "INITIAL_LIGI_ART_DOC contains header" {
 
 test "INITIAL_LIGI_TEMPLATES_DOC contains header" {
     try std.testing.expect(std.mem.indexOf(u8, INITIAL_LIGI_TEMPLATES_DOC, "# Ligi Templates") != null);
+}
+
+test "INITIAL_LIGI_TAGS_DOC contains header" {
+    try std.testing.expect(std.mem.indexOf(u8, INITIAL_LIGI_TAGS_DOC, "# Ligi Tags") != null);
 }
 
 test "INITIAL_AGENTS contains header" {

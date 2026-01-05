@@ -62,6 +62,8 @@ Wiki-style syntax: `[[t/tag_name]]`
 
 Tags can appear anywhere in markdown except code blocks and HTML comments. Allowed characters: `A-Za-z0-9_-./`
 
+See [art/ligi_tags.md](art/ligi_tags.md) for full details.
+
 ## Commands
 
 ### `ligi init`
