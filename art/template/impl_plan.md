@@ -76,8 +76,8 @@ may be "N/A"; for user input or server/networked features, it must be addressed.
 <!--
 Define types with field-level documentation. These become the source of truth for implementation.
 If this is a CLI feature, include the exit codes and their meanings here.
-After type definitions, add brief data flow notes (where data is created, validated, transformed,
-and consumed) so implementers can follow the lifecycle.
+After type definitions, include a Mermaid data flow diagram (where data is created, validated,
+transformed, and consumed) so implementers can follow the lifecycle. Use Mermaid, not text tables.
 -->
 
 ```zig
@@ -92,8 +92,14 @@ pub const Example = struct {
 |------|---------|---------------|
 | | | |
 
-**Data Flow Notes**:
-- 
+**Data Flow (Mermaid)**:
+
+```mermaid
+flowchart LR
+    A[Source] --> B[Validation]
+    B --> C[Transformation]
+    C --> D[Consumption]
+```
 
 ### File Formats
 

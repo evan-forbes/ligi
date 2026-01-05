@@ -50,7 +50,7 @@ Keep this compact. Include:
 
 <!--
 Define only the key structs or message shapes. Include exit codes.
-Append brief data flow notes (create/validate/transform/consume).
+Append a Mermaid data flow diagram (create/validate/transform/consume). Use Mermaid, not text tables.
 -->
 
 ```zig
@@ -65,8 +65,14 @@ pub const Example = struct {
 |------|---------|---------------|
 | | | |
 
-**Data Flow Notes**:
-- 
+**Data Flow (Mermaid)**:
+
+```mermaid
+flowchart LR
+    A[Source] --> B[Validation]
+    B --> C[Transformation]
+    C --> D[Consumption]
+```
 
 ---
 
