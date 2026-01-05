@@ -165,6 +165,29 @@ pub const COMMANDS = [_]CommandDef{
         \\  --no-index      Disable directory listing
         ,
     },
+    .{
+        .canonical = "globalize",
+        .names = &.{ "globalize", "glob", "g" },
+        .description = "Copy local assets to global ~/.ligi directory",
+        .long_description =
+        \\Copy local ligi assets to the global ~/.ligi directory.
+        \\
+        \\Makes art documents, templates, data, and media accessible across
+        \\all ligi repositories. If a target file already exists, prompts
+        \\for confirmation before overwriting.
+        \\
+        \\Usage: ligi globalize <path>... [-f|--force]
+        \\
+        \\Options:
+        \\  -f, --force    Overwrite existing files without prompting
+        \\  -h, --help     Show this help message
+        \\
+        \\Examples:
+        \\  ligi globalize art/template/my_template.md
+        \\  ligi glob data/reference.csv media/diagram.png
+        \\  ligi g art/template/*.md --force
+        ,
+    },
 };
 
 /// Build the ligi command registry
@@ -245,6 +268,14 @@ const ServeParams = clap.parseParamsComptime(
     \\-p, --port <u16>     Port to bind (default: 8777)
     \\-o, --open           Open browser after starting server
     \\-n, --no-index       Disable directory listing
+    \\
+);
+
+/// Globalize command options
+const GlobalizeParams = clap.parseParamsComptime(
+    \\-h, --help         Show this help message
+    \\-f, --force        Overwrite existing files without prompting
+    \\<str>...
     \\
 );
 
@@ -330,6 +361,8 @@ pub fn run(
         return runTemplateCommand(allocator, remaining_args, stdout, stderr);
     } else if (std.mem.eql(u8, cmd.canonical, "serve")) {
         return runServeCommand(allocator, remaining_args, stdout, stderr);
+    } else if (std.mem.eql(u8, cmd.canonical, "globalize")) {
+        return runGlobalizeCommand(allocator, remaining_args, stdout, stderr);
     }
 
     try stderr.print("error: command '{s}' has no handler\n", .{cmd.canonical});
@@ -661,6 +694,46 @@ fn runServeCommand(
     );
 }
 
+/// Run the globalize command with clap parsing
+fn runGlobalizeCommand(
+    allocator: std.mem.Allocator,
+    args: []const []const u8,
+    stdout: anytype,
+    stderr: anytype,
+) !u8 {
+    var diag: clap.Diagnostic = .{};
+    var iter = clap.args.SliceIterator{ .args = args };
+
+    var res = clap.parseEx(clap.Help, &GlobalizeParams, clap.parsers.default, &iter, .{
+        .diagnostic = &diag,
+        .allocator = allocator,
+    }) catch |err| {
+        try diag.report(stderr, err);
+        return 1;
+    };
+    defer res.deinit();
+
+    // Handle --help for globalize
+    if (res.args.help != 0) {
+        const registry = buildRegistry();
+        if (registry.findCommand("globalize")) |cmd| {
+            try registry.printCommandHelp(cmd, stdout);
+        }
+        return 0;
+    }
+
+    const globalize_cmd = @import("commands/globalize.zig");
+    const positionals = res.positionals[0]; // <str>... is first positional
+
+    return globalize_cmd.run(
+        allocator,
+        positionals,
+        res.args.force != 0,
+        stdout,
+        stderr,
+    );
+}
+
 // ============================================================================
 // Tests
 // ============================================================================
@@ -701,6 +774,7 @@ test "printHelp includes all commands" {
     try std.testing.expect(std.mem.indexOf(u8, output, "check") != null);
     try std.testing.expect(std.mem.indexOf(u8, output, "backup") != null);
     try std.testing.expect(std.mem.indexOf(u8, output, "serve") != null);
+    try std.testing.expect(std.mem.indexOf(u8, output, "globalize") != null);
 }
 
 test "printHelp shows aliases" {
@@ -757,4 +831,23 @@ test "QueryParams are valid" {
 test "ServeParams are valid" {
     // Verify serve params compile correctly
     _ = ServeParams;
+}
+
+test "GlobalizeParams are valid" {
+    // Verify globalize params compile correctly
+    _ = GlobalizeParams;
+}
+
+test "findCommand returns globalize for all aliases" {
+    const registry = buildRegistry();
+    const cmd_canonical = registry.findCommand("globalize");
+    const cmd_glob = registry.findCommand("glob");
+    const cmd_g = registry.findCommand("g");
+
+    try std.testing.expect(cmd_canonical != null);
+    try std.testing.expect(cmd_glob != null);
+    try std.testing.expect(cmd_g != null);
+    try std.testing.expectEqualStrings("globalize", cmd_canonical.?.canonical);
+    try std.testing.expectEqualStrings("globalize", cmd_glob.?.canonical);
+    try std.testing.expectEqualStrings("globalize", cmd_g.?.canonical);
 }
