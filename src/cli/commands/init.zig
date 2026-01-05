@@ -36,6 +36,10 @@ pub const INITIAL_ART_README =
     \\- `ligi_art.md` explains the art directory
     \\- `ligi_templates.md` explains templates
     \\
+    \\Related directories:
+    \\- [media](../media/README.md) - images and diagrams for markdown docs
+    \\- [data](../data/README.md) - CSV/JSONL files for tables and visualizations
+    \\
     \\Please treat `art/` as durable project context. Avoid deleting or moving files
     \\here unless explicitly requested; prefer `archive/` for cleanup. See
     \\`art/founding_idea.md` for design intent.
@@ -96,6 +100,34 @@ pub const INITIAL_AGENTS =
     \\(`art/archive/`). See `art/ligi_art.md` and `art/founding_idea.md`.
     \\
     \\Optional: run `scripts/install_git_hooks.sh` to block `art/` deletions.
+    \\
+;
+
+/// Initial content for media/README.md
+pub const INITIAL_MEDIA_README =
+    \\# media/
+    \\
+    \\This directory holds media files (images, diagrams, etc.) referenced by markdown
+    \\documents in this repository.
+    \\
+    \\Guidelines:
+    \\- Use descriptive filenames (e.g., `architecture-overview.png`)
+    \\- Prefer vector formats (SVG) when possible for diagrams
+    \\- Reference files using relative paths from your markdown: `![alt](../media/image.png)`
+    \\
+;
+
+/// Initial content for data/README.md
+pub const INITIAL_DATA_README =
+    \\# data/
+    \\
+    \\This directory holds structured data files (CSV, JSONL, etc.) that can be rendered
+    \\into tables or visualizations in markdown documents.
+    \\
+    \\Guidelines:
+    \\- Use descriptive filenames (e.g., `metrics-2024.csv`)
+    \\- Include a header row in CSV files
+    \\- Use JSONL for semi-structured or nested data
     \\
 ;
 
@@ -205,7 +237,25 @@ pub fn run(
     defer allocator.free(agents_path);
     try createFileTracked(allocator, agents_path, INITIAL_AGENTS, &result);
 
-    // 5. Config file
+    // 5. media/ directory and README
+    const media_path = try paths.joinPath(allocator, &.{ base_path, "media" });
+    defer allocator.free(media_path);
+    try createDirTracked(allocator, media_path, &result);
+
+    const media_readme_path = try paths.joinPath(allocator, &.{ media_path, "README.md" });
+    defer allocator.free(media_readme_path);
+    try createFileTracked(allocator, media_readme_path, INITIAL_MEDIA_README, &result);
+
+    // 6. data/ directory and README
+    const data_path = try paths.joinPath(allocator, &.{ base_path, "data" });
+    defer allocator.free(data_path);
+    try createDirTracked(allocator, data_path, &result);
+
+    const data_readme_path = try paths.joinPath(allocator, &.{ data_path, "README.md" });
+    defer allocator.free(data_readme_path);
+    try createFileTracked(allocator, data_readme_path, INITIAL_DATA_README, &result);
+
+    // 7. Config file
     var config_dir: []const u8 = undefined;
     var config_dir_allocated = false;
     defer if (config_dir_allocated) allocator.free(config_dir);
@@ -323,6 +373,19 @@ test "INITIAL_LIGI_TEMPLATES_DOC contains header" {
 
 test "INITIAL_AGENTS contains header" {
     try std.testing.expect(std.mem.indexOf(u8, INITIAL_AGENTS, "# Ligi Agent Notes") != null);
+}
+
+test "INITIAL_MEDIA_README contains header" {
+    try std.testing.expect(std.mem.indexOf(u8, INITIAL_MEDIA_README, "# media/") != null);
+}
+
+test "INITIAL_DATA_README contains header" {
+    try std.testing.expect(std.mem.indexOf(u8, INITIAL_DATA_README, "# data/") != null);
+}
+
+test "INITIAL_ART_README links to media and data" {
+    try std.testing.expect(std.mem.indexOf(u8, INITIAL_ART_README, "[media](../media/README.md)") != null);
+    try std.testing.expect(std.mem.indexOf(u8, INITIAL_ART_README, "[data](../data/README.md)") != null);
 }
 
 test "InitResult init and deinit work correctly" {
