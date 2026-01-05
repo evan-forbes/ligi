@@ -21,7 +21,7 @@ Tags inside these are skipped:
 
 ```bash
 ligi index                # rebuild tag indexes
-ligi query t planning     # files with [[t/planning]]
+ligi query t planning     # files with [[t/planning]](index/tags/planning.md)
 ligi q t bug & urgent     # AND query
 ligi q t bug | urgent     # OR query
 ```

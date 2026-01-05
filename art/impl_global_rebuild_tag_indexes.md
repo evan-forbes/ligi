@@ -1,4 +1,4 @@
-[[t/TODO]]
+[[t/TODO]](index/tags/TODO.md)
 
 # Ligi Global Rebuild Tag Indexes Implementation Plan
 

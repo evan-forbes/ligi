@@ -145,6 +145,22 @@ pub fn run(
     // Write local indexes
     const local_result = try tag_index.writeLocalIndexes(arena_alloc, art_path, &tag_map, stdout, quiet);
 
+    // Fill tag links in source files
+    var tags_filled: usize = 0;
+    if (file) |f| {
+        // Fill only the specified file
+        const file_in_art = if (std.mem.startsWith(u8, f, "art/"))
+            f[4..]
+        else if (std.mem.startsWith(u8, f, "art\\"))
+            f[4..]
+        else
+            f;
+        tags_filled = try tag_index.fillTagLinksInFile(arena_alloc, art_path, file_in_art, stdout, quiet);
+    } else {
+        // Fill all files
+        tags_filled = try tag_index.fillAllTagLinks(arena_alloc, art_path, follow_symlinks, ignore_patterns, stdout, quiet);
+    }
+
     // Write global indexes
     tag_index.writeGlobalIndexes(arena_alloc, &tag_map, root_path, stdout, quiet) catch |err| {
         // Warn but don't fail if global write fails
@@ -154,6 +170,9 @@ pub fn run(
     // Print summary
     if (!quiet) {
         try stdout.print("indexed {d} files, found {d} unique tags\n", .{ file_count, tag_count });
+        if (tags_filled > 0) {
+            try stdout.print("filled {d} tag link(s) in source files\n", .{tags_filled});
+        }
         if (local_result.created > 0 or local_result.updated > 0) {
             // Already printed by writeLocalIndexes
         }

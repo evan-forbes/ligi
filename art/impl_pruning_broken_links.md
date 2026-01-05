@@ -1,4 +1,4 @@
-[[t/TODO]]
+[[t/TODO]](index/tags/TODO.md)
 
 # Ligi Pruning Broken Links Implementation Plan
 

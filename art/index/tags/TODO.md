@@ -4,10 +4,11 @@ This file is auto-maintained by ligi.
 
 ## Files
 
-- art/impl_automated_publishing.md
-- art/impl_global_rebuild_tag_indexes.md
-- art/impl_graph_query.md
-- art/impl_link_fill.md
-- art/impl_pruning_broken_links.md
-- art/impl_table_rendering.md
-- art/impl_text_to_speech.md
+- [art/impl_automated_publishing.md](../../impl_automated_publishing.md)
+- [art/impl_global_rebuild_tag_indexes.md](../../impl_global_rebuild_tag_indexes.md)
+- [art/impl_graph_query.md](../../impl_graph_query.md)
+- [art/impl_link_fill.md](../../impl_link_fill.md)
+- [art/impl_pruning_broken_links.md](../../impl_pruning_broken_links.md)
+- [art/impl_speech_to_text.md](../../impl_speech_to_text.md)
+- [art/impl_table_rendering.md](../../impl_table_rendering.md)
+- [art/impl_text_to_speech.md](../../impl_text_to_speech.md)

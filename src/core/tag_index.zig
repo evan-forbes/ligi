@@ -179,6 +179,253 @@ pub fn freeTags(allocator: std.mem.Allocator, tags: []Tag) void {
     allocator.free(tags);
 }
 
+/// Result of filling tag links in content
+pub const FillResult = struct {
+    content: []const u8,
+    tags_filled: usize,
+};
+
+/// Fill tag links in markdown content.
+/// Converts `[[t/tag_name]]` to `[[t/tag_name]](relative/path/to/tags/tag_name.md)`
+/// Only fills tags that don't already have a link (i.e., not followed by `](`).
+///
+/// Parameters:
+/// - allocator: Allocator for the result
+/// - content: The markdown content to process
+/// - source_path_in_art: Path of the source file relative to art/ (e.g., "notes.md" or "deep/notes.md")
+///
+/// Returns the new content with filled links, or null if no changes were made.
+pub fn fillTagLinks(allocator: std.mem.Allocator, content: []const u8, source_path_in_art: []const u8) !FillResult {
+    var result: std.ArrayList(u8) = .empty;
+    errdefer result.deinit(allocator);
+
+    var tags_filled: usize = 0;
+    var state: ParserState = .normal;
+    var pos: usize = 0;
+    var last_copy_pos: usize = 0;
+
+    // Skip UTF-8 BOM if present
+    if (content.len >= 3 and std.mem.eql(u8, content[0..3], UTF8_BOM)) {
+        pos = 3;
+        try result.appendSlice(allocator, UTF8_BOM);
+        last_copy_pos = 3;
+    }
+
+    // Calculate the relative path prefix from source file to art/index/tags/
+    // Source is at art/<source_path_in_art>, target is at art/index/tags/<tag>.md
+    const depth = countPathDepth(source_path_in_art);
+    var path_prefix: std.ArrayList(u8) = .empty;
+    defer path_prefix.deinit(allocator);
+    for (0..depth) |_| {
+        try path_prefix.appendSlice(allocator, "../");
+    }
+    try path_prefix.appendSlice(allocator, "index/tags/");
+
+    while (pos < content.len) {
+        switch (state) {
+            .normal => {
+                // Check for fenced code block start
+                if (startsWithAt(content, pos, "```")) {
+                    state = .in_fenced_code;
+                    pos += 3;
+                    continue;
+                }
+                // Check for HTML comment start
+                if (startsWithAt(content, pos, "<!--")) {
+                    state = .in_html_comment;
+                    pos += 4;
+                    continue;
+                }
+                // Check for inline code start
+                if (content[pos] == '`') {
+                    state = .in_inline_code;
+                    pos += 1;
+                    continue;
+                }
+                // Check for tag
+                if (startsWithAt(content, pos, "[[t/")) {
+                    pos += 4; // skip "[[t/"
+                    const tag_name_start = pos;
+
+                    // Scan for closing ]]
+                    while (pos < content.len and !startsWithAt(content, pos, "]]")) {
+                        pos += 1;
+                    }
+
+                    if (pos < content.len) {
+                        const tag_name = content[tag_name_start..pos];
+                        pos += 2; // skip "]]"
+
+                        // Check if already linked (the second ] followed by `(`)
+                        // In [[t/tag]](url), the link is formed by ]( at positions 8-9
+                        // After pos += 2, pos is at 10, so we check pos-1 for ](
+                        const already_linked = pos > 0 and pos < content.len and startsWithAt(content, pos - 1, "](");
+
+                        if (!already_linked and isValidTagName(tag_name) == .valid) {
+                            // Copy everything up to and including the tag, minus one ']'
+                            // Input: [[t/tag]]  -> Output: [[t/tag]](path.md)
+                            // We copy [[t/tag] (pos-1) then add ](path)
+                            try result.appendSlice(allocator, content[last_copy_pos .. pos - 1]);
+
+                            // Add the link (this provides the closing ] and the url)
+                            try result.appendSlice(allocator, "](");
+                            try result.appendSlice(allocator, path_prefix.items);
+                            try result.appendSlice(allocator, tag_name);
+                            try result.appendSlice(allocator, ".md)");
+
+                            last_copy_pos = pos;
+                            tags_filled += 1;
+                        }
+                    }
+                    continue;
+                }
+                pos += 1;
+            },
+            .in_fenced_code => {
+                // Scan to end of line
+                const line_start = pos;
+                while (pos < content.len and content[pos] != '\n') {
+                    pos += 1;
+                }
+                // Check if this line ends fenced block
+                const line_content = content[line_start..pos];
+                const trimmed = std.mem.trimLeft(u8, line_content, " \t");
+                if (std.mem.startsWith(u8, trimmed, "```")) {
+                    state = .normal;
+                }
+                if (pos < content.len) {
+                    pos += 1; // skip newline
+                }
+            },
+            .in_inline_code => {
+                if (content[pos] == '`') {
+                    state = .normal;
+                }
+                pos += 1;
+            },
+            .in_html_comment => {
+                if (startsWithAt(content, pos, "-->")) {
+                    state = .normal;
+                    pos += 3;
+                } else {
+                    pos += 1;
+                }
+            },
+        }
+    }
+
+    // If no changes were made, return original content
+    if (tags_filled == 0) {
+        return .{ .content = try allocator.dupe(u8, content), .tags_filled = 0 };
+    }
+
+    // Copy remaining content
+    try result.appendSlice(allocator, content[last_copy_pos..]);
+
+    return .{ .content = try result.toOwnedSlice(allocator), .tags_filled = tags_filled };
+}
+
+/// Count the depth of a path (number of directory levels)
+fn countPathDepth(path: []const u8) usize {
+    var depth: usize = 0;
+    for (path) |c| {
+        if (c == '/' or c == '\\') depth += 1;
+    }
+    return depth;
+}
+
+/// Fill tag links in a file and write back if changed.
+/// Returns the number of tags filled.
+pub fn fillTagLinksInFile(
+    allocator: std.mem.Allocator,
+    art_path: []const u8,
+    file_path_in_art: []const u8,
+    stdout: anytype,
+    quiet: bool,
+) !usize {
+    // Build full path
+    const full_path = try std.fs.path.join(allocator, &.{ art_path, file_path_in_art });
+    defer allocator.free(full_path);
+
+    // Read file
+    const content = switch (fs.readFile(allocator, full_path)) {
+        .ok => |c| c,
+        .err => return 0,
+    };
+    defer allocator.free(content);
+
+    // Fill tags
+    const fill_result = try fillTagLinks(allocator, content, file_path_in_art);
+    defer allocator.free(fill_result.content);
+
+    if (fill_result.tags_filled > 0) {
+        // Write back
+        try writeFile(full_path, fill_result.content);
+        if (!quiet) {
+            try stdout.print("filled {d} tag(s): {s}\n", .{ fill_result.tags_filled, full_path });
+        }
+    }
+
+    return fill_result.tags_filled;
+}
+
+/// Fill tag links in all markdown files in an art directory.
+/// Returns total number of tags filled.
+pub fn fillAllTagLinks(
+    allocator: std.mem.Allocator,
+    art_path: []const u8,
+    follow_symlinks: bool,
+    ignore_patterns: []const []const u8,
+    stdout: anytype,
+    quiet: bool,
+) !usize {
+    var total_filled: usize = 0;
+
+    var dir = std.fs.cwd().openDir(art_path, .{ .iterate = true }) catch {
+        return 0;
+    };
+    defer dir.close();
+
+    var walker = dir.walk(allocator) catch return 0;
+    defer walker.deinit();
+
+    while (walker.next() catch null) |entry| {
+        // Skip directories
+        if (entry.kind == .directory) continue;
+
+        // Skip symlinks if not following
+        if (entry.kind == .sym_link and !follow_symlinks) {
+            continue;
+        }
+
+        // Only process .md files
+        if (!std.mem.endsWith(u8, entry.path, ".md")) continue;
+
+        // Skip files in index/ subdirectory
+        if (std.mem.startsWith(u8, entry.path, "index/") or
+            std.mem.startsWith(u8, entry.path, "index\\"))
+        {
+            continue;
+        }
+
+        // Check ignore patterns
+        var should_ignore = false;
+        for (ignore_patterns) |pattern| {
+            if (matchGlob(entry.basename, pattern)) {
+                should_ignore = true;
+                break;
+            }
+        }
+        if (should_ignore) continue;
+
+        // Fill tags in this file
+        const filled = try fillTagLinksInFile(allocator, art_path, entry.path, stdout, quiet);
+        total_filled += filled;
+    }
+
+    return total_filled;
+}
+
 /// Check if content at position starts with prefix
 fn startsWithAt(content: []const u8, pos: usize, prefix: []const u8) bool {
     if (pos + prefix.len > content.len) return false;
@@ -654,7 +901,7 @@ pub fn renderTagIndex(allocator: std.mem.Allocator, tag_map: *const TagMap) ![]c
     return output.toOwnedSlice(allocator);
 }
 
-/// Render a per-tag index file
+/// Render a per-tag index file (local version with relative links)
 pub fn renderPerTagIndex(allocator: std.mem.Allocator, tag: []const u8, files: []const []const u8) ![]const u8 {
     var output: std.ArrayList(u8) = .empty;
     errdefer output.deinit(allocator);
@@ -670,8 +917,35 @@ pub fn renderPerTagIndex(allocator: std.mem.Allocator, tag: []const u8, files: [
     @memcpy(sorted, files);
     sortStrings(sorted);
 
+    // Count depth of tag (for nested tags like foo/bar)
+    var tag_depth: usize = 0;
+    for (tag) |c| {
+        if (c == '/') tag_depth += 1;
+    }
+
     for (sorted) |file| {
-        try writer.print("- {s}\n", .{file});
+        // For local indexes, files are repo-relative (e.g., "art/path/file.md")
+        // Tag index is at art/index/tags/<tag>.md
+        // We need to compute relative path from tag index to file
+        //
+        // From art/index/tags/<tag>.md to art/path/file.md:
+        // - Go up: ../ for each segment in tag (nested tags) + ../../ (tags -> index -> art)
+        // - Then append path without "art/" prefix
+        if (std.mem.startsWith(u8, file, "art/")) {
+            const file_path = file[4..]; // Remove "art/" prefix
+            // Base depth: 2 (tags -> index -> art) + tag_depth (nested tag dirs)
+            const base_depth = 2 + tag_depth;
+            // Build relative path prefix
+            var rel_prefix: std.ArrayList(u8) = .empty;
+            defer rel_prefix.deinit(allocator);
+            for (0..base_depth) |_| {
+                try rel_prefix.appendSlice(allocator, "../");
+            }
+            try writer.print("- [{s}]({s}{s})\n", .{ file, rel_prefix.items, file_path });
+        } else {
+            // For non-art paths (shouldn't happen in local indexes), just list as-is
+            try writer.print("- {s}\n", .{file});
+        }
     }
 
     return output.toOwnedSlice(allocator);
@@ -1493,7 +1767,20 @@ pub fn readTagIndex(allocator: std.mem.Allocator, tag_index_path: []const u8) ![
             continue;
         }
         if (in_files_section and std.mem.startsWith(u8, trimmed, "- ")) {
-            const path = std.mem.trim(u8, trimmed[2..], " \t");
+            const item = std.mem.trim(u8, trimmed[2..], " \t");
+            if (item.len == 0) continue;
+
+            // Handle both formats:
+            // New: "- [art/file.md](../../file.md)" -> extract "art/file.md" from label
+            // Old: "- art/file.md" -> use as-is
+            var path: []const u8 = item;
+            if (std.mem.startsWith(u8, item, "[")) {
+                // Find closing bracket to extract label
+                if (std.mem.indexOf(u8, item, "](")) |bracket_pos| {
+                    path = item[1..bracket_pos];
+                }
+            }
+
             if (path.len > 0) {
                 const path_copy = try allocator.dupe(u8, path);
                 try files.append(allocator, path_copy);
@@ -2053,4 +2340,171 @@ test "rebuildGlobalTagIndexesFromRepos respects no-local" {
     const repo_local_index = try std.fs.path.join(allocator, &.{ repo_path, "art", "index", "ligi_tags.md" });
     defer allocator.free(repo_local_index);
     try std.testing.expect(!fs.fileExists(repo_local_index));
+}
+
+test "renderPerTagIndex: produces links to files" {
+    const allocator = std.testing.allocator;
+    const files = &[_][]const u8{ "art/z.md", "art/a.md" };
+
+    const output = try renderPerTagIndex(allocator, "mytag", files);
+    defer allocator.free(output);
+
+    // Check for link format: - [art/a.md](../../a.md)
+    try std.testing.expect(std.mem.indexOf(u8, output, "[art/a.md](../../a.md)") != null);
+    try std.testing.expect(std.mem.indexOf(u8, output, "[art/z.md](../../z.md)") != null);
+}
+
+test "renderPerTagIndex: handles nested file paths" {
+    const allocator = std.testing.allocator;
+    const files = &[_][]const u8{"art/deep/nested/file.md"};
+
+    const output = try renderPerTagIndex(allocator, "mytag", files);
+    defer allocator.free(output);
+
+    // Check for link format: - [art/deep/nested/file.md](../../deep/nested/file.md)
+    try std.testing.expect(std.mem.indexOf(u8, output, "[art/deep/nested/file.md](../../deep/nested/file.md)") != null);
+}
+
+test "renderPerTagIndex: handles nested tags" {
+    const allocator = std.testing.allocator;
+    const files = &[_][]const u8{"art/file.md"};
+
+    // Nested tag like "foo/bar" is stored at art/index/tags/foo/bar.md
+    // So path to file needs extra ../
+    const output = try renderPerTagIndex(allocator, "foo/bar", files);
+    defer allocator.free(output);
+
+    // Should have 3 ../ segments (tags -> index -> art + 1 for foo/)
+    try std.testing.expect(std.mem.indexOf(u8, output, "[art/file.md](../../../file.md)") != null);
+}
+
+test "fillTagLinks: basic tag filling" {
+    const allocator = std.testing.allocator;
+    const content = "Some text [[t/alpha]] more text";
+
+    const result = try fillTagLinks(allocator, content, "notes.md");
+    defer allocator.free(result.content);
+
+    try std.testing.expectEqual(@as(usize, 1), result.tags_filled);
+    try std.testing.expectEqualStrings("Some text [[t/alpha]](index/tags/alpha.md) more text", result.content);
+}
+
+test "fillTagLinks: multiple tags" {
+    const allocator = std.testing.allocator;
+    const content = "[[t/alpha]] and [[t/beta]]";
+
+    const result = try fillTagLinks(allocator, content, "notes.md");
+    defer allocator.free(result.content);
+
+    try std.testing.expectEqual(@as(usize, 2), result.tags_filled);
+    try std.testing.expectEqualStrings("[[t/alpha]](index/tags/alpha.md) and [[t/beta]](index/tags/beta.md)", result.content);
+}
+
+test "fillTagLinks: respects file depth" {
+    const allocator = std.testing.allocator;
+    const content = "[[t/alpha]]";
+
+    // File is at art/deep/notes.md, so need ../ to reach art/
+    const result = try fillTagLinks(allocator, content, "deep/notes.md");
+    defer allocator.free(result.content);
+
+    try std.testing.expectEqual(@as(usize, 1), result.tags_filled);
+    try std.testing.expectEqualStrings("[[t/alpha]](../index/tags/alpha.md)", result.content);
+}
+
+test "fillTagLinks: deeply nested file" {
+    const allocator = std.testing.allocator;
+    const content = "[[t/alpha]]";
+
+    // File is at art/a/b/c/notes.md
+    const result = try fillTagLinks(allocator, content, "a/b/c/notes.md");
+    defer allocator.free(result.content);
+
+    try std.testing.expectEqual(@as(usize, 1), result.tags_filled);
+    try std.testing.expectEqualStrings("[[t/alpha]](../../../index/tags/alpha.md)", result.content);
+}
+
+test "fillTagLinks: skips already linked tags" {
+    const allocator = std.testing.allocator;
+    const content = "[[t/alpha]](existing/path.md) and [[t/beta]]";
+
+    const result = try fillTagLinks(allocator, content, "notes.md");
+    defer allocator.free(result.content);
+
+    // Only beta should be filled, alpha is already linked
+    try std.testing.expectEqual(@as(usize, 1), result.tags_filled);
+    try std.testing.expectEqualStrings("[[t/alpha]](existing/path.md) and [[t/beta]](index/tags/beta.md)", result.content);
+}
+
+test "fillTagLinks: ignores tags in code blocks" {
+    const allocator = std.testing.allocator;
+    const content =
+        \\```
+        \\[[t/ignored]]
+        \\```
+        \\[[t/found]]
+    ;
+
+    const result = try fillTagLinks(allocator, content, "notes.md");
+    defer allocator.free(result.content);
+
+    try std.testing.expectEqual(@as(usize, 1), result.tags_filled);
+    try std.testing.expect(std.mem.indexOf(u8, result.content, "[[t/found]](index/tags/found.md)") != null);
+    // The ignored tag should remain unchanged (no link added)
+    try std.testing.expect(std.mem.indexOf(u8, result.content, "[[t/ignored]](") == null);
+}
+
+test "fillTagLinks: ignores tags in inline code" {
+    const allocator = std.testing.allocator;
+    const content = "`[[t/ignored]]` [[t/found]]";
+
+    const result = try fillTagLinks(allocator, content, "notes.md");
+    defer allocator.free(result.content);
+
+    try std.testing.expectEqual(@as(usize, 1), result.tags_filled);
+    try std.testing.expect(std.mem.indexOf(u8, result.content, "[[t/found]](index/tags/found.md)") != null);
+}
+
+test "fillTagLinks: no changes returns original content" {
+    const allocator = std.testing.allocator;
+    const content = "No tags here";
+
+    const result = try fillTagLinks(allocator, content, "notes.md");
+    defer allocator.free(result.content);
+
+    try std.testing.expectEqual(@as(usize, 0), result.tags_filled);
+    try std.testing.expectEqualStrings("No tags here", result.content);
+}
+
+test "fillTagLinks: handles nested tag names" {
+    const allocator = std.testing.allocator;
+    const content = "[[t/category/subtag]]";
+
+    const result = try fillTagLinks(allocator, content, "notes.md");
+    defer allocator.free(result.content);
+
+    try std.testing.expectEqual(@as(usize, 1), result.tags_filled);
+    try std.testing.expectEqualStrings("[[t/category/subtag]](index/tags/category/subtag.md)", result.content);
+}
+
+test "fillTagLinks: idempotent (running twice produces same result)" {
+    const allocator = std.testing.allocator;
+    const content = "[[t/alpha]]";
+
+    const result1 = try fillTagLinks(allocator, content, "notes.md");
+    defer allocator.free(result1.content);
+
+    const result2 = try fillTagLinks(allocator, result1.content, "notes.md");
+    defer allocator.free(result2.content);
+
+    // Second run should fill nothing (already linked)
+    try std.testing.expectEqual(@as(usize, 0), result2.tags_filled);
+    try std.testing.expectEqualStrings(result1.content, result2.content);
+}
+
+test "countPathDepth: counts slashes" {
+    try std.testing.expectEqual(@as(usize, 0), countPathDepth("file.md"));
+    try std.testing.expectEqual(@as(usize, 1), countPathDepth("dir/file.md"));
+    try std.testing.expectEqual(@as(usize, 2), countPathDepth("a/b/file.md"));
+    try std.testing.expectEqual(@as(usize, 3), countPathDepth("a/b/c/file.md"));
 }

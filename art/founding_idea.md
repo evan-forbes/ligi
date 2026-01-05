@@ -27,7 +27,7 @@ ligi itself is just a cli tool for managing and maintaining human readable index
 
 #### Tagging
 
-There should be a wiki link esque tag [[t/tag_name]] (or similar whatever is standard). All known tags are maintained in art/index/ligi_tags.md, which is a document that has a list of all tags and links to the index file for that tag.
+There should be a wiki link esque tag [[t/tag_name]](index/tags/tag_name.md) (or similar whatever is standard). All known tags are maintained in art/index/ligi_tags.md, which is a document that has a list of all tags and links to the index file for that tag.
 
 ligi can be ran anytime after that tag is added to a document, in which case ligi keeps track of that tag in a new index. 
 

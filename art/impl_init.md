@@ -1,4 +1,4 @@
-[[t/DONE]]
+[[t/DONE]](index/tags/DONE.md)
 
 # Ligi `init` Command Implementation Plan
 
