@@ -255,7 +255,8 @@ pub const TagMap = struct {
         for (tags_to_remove.items) |tag| {
             if (self.map.fetchRemove(tag)) |kv| {
                 self.allocator.free(kv.key);
-                kv.value.deinit(self.allocator);
+                var value = kv.value;
+                value.deinit(self.allocator);
             }
         }
     }

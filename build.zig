@@ -144,9 +144,11 @@ pub fn build(b: *std.Build) void {
 
     // Integration tests
     const integration_tests = b.addTest(.{
-        .root_source_file = b.path("src/testing/integration/serve.zig"),
-        .target = target,
-        .optimize = optimize,
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/testing/integration/serve.zig"),
+            .target = target,
+            .optimize = optimize,
+        }),
     });
     const run_integration_tests = b.addRunArtifact(integration_tests);
     // Ensure the main executable is built and installed before running integration tests
