@@ -58,14 +58,20 @@ pub fn run(
     const follow_symlinks = cfg.index.follow_symlinks;
 
     // Collect tags
-    var tag_map = try tag_index.collectTags(
-        arena_alloc,
-        art_path,
-        file,
-        follow_symlinks,
-        ignore_patterns,
-        stderr,
-    );
+    var tag_map: tag_index.TagMap = undefined;
+    if (file) |f| {
+        tag_map = try tag_index.loadTagMapFromIndexes(arena_alloc, art_path, stderr);
+        try tag_index.updateTagMapForFile(arena_alloc, &tag_map, art_path, f, stderr);
+    } else {
+        tag_map = try tag_index.collectTags(
+            arena_alloc,
+            art_path,
+            null,
+            follow_symlinks,
+            ignore_patterns,
+            stderr,
+        );
+    }
     defer tag_map.deinit();
 
     // Count files and tags
