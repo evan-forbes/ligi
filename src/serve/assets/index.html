@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ligi Markdown Viewer</title>
+    <link rel="stylesheet" href="/assets/styles.css">
+</head>
+<body>
+    <div class="container">
+        <nav class="sidebar">
+            <div class="sidebar-header">
+                <h1>Ligi</h1>
+            </div>
+            <div class="file-list" id="file-list">
+                <div class="loading">Loading...</div>
+            </div>
+        </nav>
+        <main class="content">
+            <article id="content" class="markdown-body">
+                <div class="welcome">
+                    <h1>Welcome to Ligi</h1>
+                    <p>Select a markdown file from the sidebar to view it.</p>
+                </div>
+            </article>
+        </main>
+    </div>
+    <script src="/assets/vendor/marked.min.js"></script>
+    <script src="/assets/vendor/mermaid.min.js"></script>
+    <script src="/assets/app.js"></script>
+</body>
+</html>

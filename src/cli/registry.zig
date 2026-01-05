@@ -144,6 +144,27 @@ pub const COMMANDS = [_]CommandDef{
         \\If path is omitted, fzf is launched to select a template.
         ,
     },
+    .{
+        .canonical = "serve",
+        .names = &.{ "serve", "s" },
+        .description = "Serve markdown files with GFM + Mermaid rendering",
+        .long_description =
+        \\Serve markdown files locally with GitHub Flavored Markdown rendering.
+        \\
+        \\Starts a local HTTP server that renders Markdown files with GFM
+        \\features (tables, task lists, strikethrough) and Mermaid diagrams.
+        \\All assets are embedded - no CDN dependencies.
+        \\
+        \\Usage: ligi serve [options]
+        \\
+        \\Options:
+        \\  --root <path>   Base directory to serve (default: ./art or .)
+        \\  --host <host>   Host to bind (default: 127.0.0.1)
+        \\  --port <port>   Port to bind (default: 8777)
+        \\  --open          Open browser after starting server
+        \\  --no-index      Disable directory listing
+        ,
+    },
 };
 
 /// Build the ligi command registry
@@ -210,6 +231,17 @@ const IndexParams = clap.parseParamsComptime(
 const QueryParams = clap.parseParamsComptime(
     \\-h, --help         Show this help message
     \\<str>...
+    \\
+);
+
+/// Serve command options
+const ServeParams = clap.parseParamsComptime(
+    \\-h, --help           Show this help message
+    \\-r, --root <str>     Base directory to serve (default: ./art or .)
+    \\-H, --host <str>     Host to bind (default: 127.0.0.1)
+    \\-p, --port <u16>     Port to bind (default: 8777)
+    \\-o, --open           Open browser after starting server
+    \\-n, --no-index       Disable directory listing
     \\
 );
 
@@ -293,6 +325,8 @@ pub fn run(
         return runBackupCommand(allocator, remaining_args, global_args.quiet != 0, stdout, stderr);
     } else if (std.mem.eql(u8, cmd.canonical, "template")) {
         return runTemplateCommand(allocator, remaining_args, stdout, stderr);
+    } else if (std.mem.eql(u8, cmd.canonical, "serve")) {
+        return runServeCommand(allocator, remaining_args, stdout, stderr);
     }
 
     try stderr.print("error: command '{s}' has no handler\n", .{cmd.canonical});
@@ -573,6 +607,48 @@ fn runTemplateFillCommand(
     );
 }
 
+/// Run the serve command with clap parsing
+fn runServeCommand(
+    allocator: std.mem.Allocator,
+    args: []const []const u8,
+    stdout: anytype,
+    stderr: anytype,
+) !u8 {
+    var diag: clap.Diagnostic = .{};
+    var iter = clap.args.SliceIterator{ .args = args };
+
+    var res = clap.parseEx(clap.Help, &ServeParams, clap.parsers.default, &iter, .{
+        .diagnostic = &diag,
+        .allocator = allocator,
+    }) catch |err| {
+        try diag.report(stderr, err);
+        return 1;
+    };
+    defer res.deinit();
+
+    // Handle --help for serve
+    if (res.args.help != 0) {
+        const registry = buildRegistry();
+        if (registry.findCommand("serve")) |cmd| {
+            try registry.printCommandHelp(cmd, stdout);
+        }
+        return 0;
+    }
+
+    const serve_cmd = @import("commands/serve.zig");
+
+    return serve_cmd.run(
+        allocator,
+        res.args.root,
+        res.args.host,
+        res.args.port,
+        res.args.open != 0,
+        res.args.@"no-index" != 0,
+        stdout,
+        stderr,
+    );
+}
+
 // ============================================================================
 // Tests
 // ============================================================================
@@ -612,6 +688,7 @@ test "printHelp includes all commands" {
     try std.testing.expect(std.mem.indexOf(u8, output, "archive") != null);
     try std.testing.expect(std.mem.indexOf(u8, output, "check") != null);
     try std.testing.expect(std.mem.indexOf(u8, output, "backup") != null);
+    try std.testing.expect(std.mem.indexOf(u8, output, "serve") != null);
 }
 
 test "printHelp shows aliases" {
@@ -663,4 +740,9 @@ test "IndexParams are valid" {
 test "QueryParams are valid" {
     // Verify query params compile correctly
     _ = QueryParams;
+}
+
+test "ServeParams are valid" {
+    // Verify serve params compile correctly
+    _ = ServeParams;
 }

@@ -6,6 +6,7 @@ const std = @import("std");
 pub const core = @import("core/mod.zig");
 pub const cli = @import("cli/mod.zig");
 pub const template = @import("template/mod.zig");
+pub const serve = @import("serve/mod.zig");
 
 // Re-export commonly used types
 pub const ErrorCategory = core.ErrorCategory;
@@ -43,4 +44,9 @@ test {
 
     // Template tests
     _ = @import("template/mod.zig");
+
+    // Serve tests
+    _ = @import("serve/mod.zig");
+    _ = @import("serve/path.zig");
+    _ = @import("serve/assets.zig");
 }
