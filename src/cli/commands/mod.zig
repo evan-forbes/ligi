@@ -10,3 +10,4 @@ pub const backup = @import("backup.zig");
 pub const serve = @import("serve.zig");
 pub const globalize = @import("globalize.zig");
 pub const voice = @import("voice.zig");
+pub const lsp = @import("lsp.zig");

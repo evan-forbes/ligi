@@ -185,6 +185,18 @@ pub const COMMANDS = [_]CommandDef{
         ,
     },
     .{
+        .canonical = "lsp",
+        .names = &.{"lsp"},
+        .description = "Run LSP server for editor completions",
+        .long_description =
+        \\Start a Language Server Protocol (LSP) server on stdio.
+        \\
+        \\Provides completion for ligi tags and file links.
+        \\
+        \\Usage: ligi lsp
+        ,
+    },
+    .{
         .canonical = "globalize",
         .names = &.{ "globalize", "glob", "g" },
         .description = "Copy local assets to global ~/.ligi directory",
@@ -287,6 +299,12 @@ const ServeParams = clap.parseParamsComptime(
     \\-p, --port <u16>     Port to bind (default: 8777)
     \\-o, --open           Open browser after starting server
     \\-n, --no-index       Disable directory listing
+    \\
+);
+
+/// LSP command options
+const LspParams = clap.parseParamsComptime(
+    \\-h, --help           Show this help message
     \\
 );
 
@@ -393,6 +411,8 @@ pub fn run(
         return runVoiceCommand(allocator, remaining_args, stdout, stderr);
     } else if (std.mem.eql(u8, cmd.canonical, "serve")) {
         return runServeCommand(allocator, remaining_args, stdout, stderr);
+    } else if (std.mem.eql(u8, cmd.canonical, "lsp")) {
+        return runLspCommand(allocator, remaining_args, stdout, stderr);
     } else if (std.mem.eql(u8, cmd.canonical, "globalize")) {
         return runGlobalizeCommand(allocator, remaining_args, stdout, stderr);
     }
@@ -768,6 +788,37 @@ fn runServeCommand(
     );
 }
 
+/// Run the lsp command with clap parsing
+fn runLspCommand(
+    allocator: std.mem.Allocator,
+    args: []const []const u8,
+    stdout: anytype,
+    stderr: anytype,
+) !u8 {
+    var diag: clap.Diagnostic = .{};
+    var iter = clap.args.SliceIterator{ .args = args };
+
+    var res = clap.parseEx(clap.Help, &LspParams, clap.parsers.default, &iter, .{
+        .diagnostic = &diag,
+        .allocator = allocator,
+    }) catch |err| {
+        try diag.report(stderr, err);
+        return 1;
+    };
+    defer res.deinit();
+
+    if (res.args.help != 0) {
+        const registry = buildRegistry();
+        if (registry.findCommand("lsp")) |cmd| {
+            try registry.printCommandHelp(cmd, stdout);
+        }
+        return 0;
+    }
+
+    const lsp_cmd = @import("commands/lsp.zig");
+    return lsp_cmd.run(allocator, stdout, stderr);
+}
+
 /// Run the globalize command with clap parsing
 fn runGlobalizeCommand(
     allocator: std.mem.Allocator,
@@ -848,6 +899,7 @@ test "printHelp includes all commands" {
     try std.testing.expect(std.mem.indexOf(u8, output, "check") != null);
     try std.testing.expect(std.mem.indexOf(u8, output, "backup") != null);
     try std.testing.expect(std.mem.indexOf(u8, output, "serve") != null);
+    try std.testing.expect(std.mem.indexOf(u8, output, "lsp") != null);
     try std.testing.expect(std.mem.indexOf(u8, output, "globalize") != null);
 }
 
@@ -905,6 +957,11 @@ test "QueryParams are valid" {
 test "ServeParams are valid" {
     // Verify serve params compile correctly
     _ = ServeParams;
+}
+
+test "LspParams are valid" {
+    // Verify lsp params compile correctly
+    _ = LspParams;
 }
 
 test "GlobalizeParams are valid" {
