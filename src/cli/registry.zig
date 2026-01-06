@@ -145,6 +145,25 @@ pub const COMMANDS = [_]CommandDef{
         ,
     },
     .{
+        .canonical = "v",
+        .names = &.{ "v", "voice" },
+        .description = "Record and transcribe audio locally (Linux only)",
+        .long_description =
+        \\Record audio from the microphone and transcribe locally using whisper.cpp (Linux only).
+        \\
+        \\Options:
+        \\  --timeout <duration>     Max recording time (default: 10m; supports s/m/h)
+        \\  --model-size <size>      Model size: tiny|base|small|medium|large
+        \\                           or tiny.en|base.en|small.en|medium.en (default: base.en)
+        \\  --model <path>           Use explicit model path (overrides --model-size)
+        \\  --no-download            Do not download model if missing
+        \\  -c, --clipboard          Copy transcript to clipboard
+        \\  -h, --help               Show this help
+        \\
+        \\Controls (Linux): Ctrl+C or Esc to cancel, Space to pause/resume
+        ,
+    },
+    .{
         .canonical = "serve",
         .names = &.{ "serve", "s" },
         .description = "Serve markdown files with GFM + Mermaid rendering",
@@ -271,6 +290,17 @@ const ServeParams = clap.parseParamsComptime(
     \\
 );
 
+/// Voice command options
+const VoiceParams = clap.parseParamsComptime(
+    \\-h, --help               Show this help message
+    \\--timeout <str>          Max recording time (default: 10m; supports s/m/h)
+    \\--model-size <str>       Model size: tiny|base|small|medium|large or tiny.en|base.en|small.en|medium.en
+    \\--model <str>            Use explicit model path (overrides --model-size)
+    \\--no-download            Do not download model if missing
+    \\-c, --clipboard          Copy transcript to clipboard
+    \\
+);
+
 /// Globalize command options
 const GlobalizeParams = clap.parseParamsComptime(
     \\-h, --help         Show this help message
@@ -359,6 +389,8 @@ pub fn run(
         return runBackupCommand(allocator, remaining_args, global_args.quiet != 0, stdout, stderr);
     } else if (std.mem.eql(u8, cmd.canonical, "template")) {
         return runTemplateCommand(allocator, remaining_args, stdout, stderr);
+    } else if (std.mem.eql(u8, cmd.canonical, "v")) {
+        return runVoiceCommand(allocator, remaining_args, stdout, stderr);
     } else if (std.mem.eql(u8, cmd.canonical, "serve")) {
         return runServeCommand(allocator, remaining_args, stdout, stderr);
     } else if (std.mem.eql(u8, cmd.canonical, "globalize")) {
@@ -501,6 +533,48 @@ fn runTemplateCommand(
     try stderr.print("error: unknown subcommand '{s}'\n", .{subcmd});
     try stderr.writeAll("usage: ligi t <fill|f> [path] [-c|--clipboard]\n");
     return 1;
+}
+
+/// Run the voice command with clap parsing
+fn runVoiceCommand(
+    allocator: std.mem.Allocator,
+    args: []const []const u8,
+    stdout: anytype,
+    stderr: anytype,
+) !u8 {
+    var diag: clap.Diagnostic = .{};
+    var iter = clap.args.SliceIterator{ .args = args };
+
+    var res = clap.parseEx(clap.Help, &VoiceParams, clap.parsers.default, &iter, .{
+        .diagnostic = &diag,
+        .allocator = allocator,
+    }) catch |err| {
+        try diag.report(stderr, err);
+        return 1;
+    };
+    defer res.deinit();
+
+    // Handle --help for voice
+    if (res.args.help != 0) {
+        const registry = buildRegistry();
+        if (registry.findCommand("v")) |cmd| {
+            try registry.printCommandHelp(cmd, stdout);
+        }
+        return 0;
+    }
+
+    const voice_cmd = @import("commands/voice.zig");
+
+    return voice_cmd.run(
+        allocator,
+        res.args.timeout,
+        res.args.@"model-size",
+        res.args.model,
+        res.args.@"no-download" == 0,
+        res.args.clipboard != 0,
+        stdout,
+        stderr,
+    );
 }
 
 /// Run the backup command with clap parsing

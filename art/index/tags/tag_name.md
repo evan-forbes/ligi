@@ -4,4 +4,4 @@ This file is auto-maintained by ligi.
 
 ## Files
 
-- [art/founding_idea.md](../../founding_idea.md)
+- art/founding_idea.md

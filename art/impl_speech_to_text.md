@@ -167,15 +167,15 @@ scripts/voice_update_models.sh v1.8.2
 
 | Model Size | Filename (from upstream script) | SHA-256 |
 |------------|---------------------------------|---------|
-| tiny | <FILL_FROM_UPSTREAM> | <FILL_FROM_UPSTREAM> |
-| base | <FILL_FROM_UPSTREAM> | <FILL_FROM_UPSTREAM> |
-| small | <FILL_FROM_UPSTREAM> | <FILL_FROM_UPSTREAM> |
-| medium | <FILL_FROM_UPSTREAM> | <FILL_FROM_UPSTREAM> |
-| large | <FILL_FROM_UPSTREAM> | <FILL_FROM_UPSTREAM> |
-| tiny.en | <FILL_FROM_UPSTREAM> | <FILL_FROM_UPSTREAM> |
-| base.en | <FILL_FROM_UPSTREAM> | <FILL_FROM_UPSTREAM> |
-| small.en | <FILL_FROM_UPSTREAM> | <FILL_FROM_UPSTREAM> |
-| medium.en | <FILL_FROM_UPSTREAM> | <FILL_FROM_UPSTREAM> |
+| tiny | ggml-tiny.bin | be07e048e1e599ad46341c8d2a135645097a538221678b7acdd1b1919c6e1b21 |
+| base | ggml-base.bin | 60ed5bc3dd14eea856493d334349b405782ddcaf0028d4b5df4088345fba2efe |
+| small | ggml-small.bin | 1be3a9b2063867b937e64e2ec7483364a79917e157fa98c5d94b5c1fffea987b |
+| medium | ggml-medium.bin | 6c14d5adee5f86394037b4e4e8b59f1673b6cee10e3cf0b11bbdbee79c156208 |
+| large | ggml-large-v3.bin | 64d182b440b98d5203c4f9bd541544d84c605196c4f7b845dfa11fb23594d1e2 |
+| tiny.en | ggml-tiny.en.bin | 921e4cf8686fdd993dcd081a5da5b6c365bfde1162e72b08d75ac75289920b1f |
+| base.en | ggml-base.en.bin | a03779c86df3323075f5e796cb2ce5029f00ec8869eee3fdfb897afe36c6d002 |
+| small.en | ggml-small.en.bin | c6138d6d58ecc8322097e0f987c32f1be8bb0a18532a3f88f734d1bbf9c41e5d |
+| medium.en | ggml-medium.en.bin | cc37e93478338ec7700281a7ac30a10128929eb8f427dda2e865faa8f6da4356 |
 
 ### Error Messages (exact)
 

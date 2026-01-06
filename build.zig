@@ -21,6 +21,12 @@ pub fn build(b: *std.Build) void {
     // target and optimize options) will be listed when running `zig build --help`
     // in this directory.
 
+    const enable_voice = b.option(bool, "voice", "Enable voice command (Linux only)") orelse false;
+    const enable_vulkan = b.option(bool, "vulkan", "Enable Vulkan GPU acceleration for voice (requires pre-built shaders)") orelse false;
+
+    const build_options = b.addOptions();
+    build_options.addOption(bool, "voice", enable_voice);
+
     // Get clap dependency
     const clap = b.dependency("clap", .{});
 
@@ -44,6 +50,7 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .imports = &.{
             .{ .name = "clap", .module = clap.module("clap") },
+            .{ .name = "build_options", .module = build_options.createModule() },
         },
     });
 
@@ -86,9 +93,251 @@ pub fn build(b: *std.Build) void {
                 // importing modules from different packages).
                 .{ .name = "ligi", .module = mod },
                 .{ .name = "clap", .module = clap.module("clap") },
+                .{ .name = "build_options", .module = build_options.createModule() },
             },
         }),
     });
+
+    if (enable_voice) {
+        if (target.result.os.tag != .linux) {
+            @panic("voice is only supported on linux");
+        }
+
+        const vendor_path = "vendor/whisper.cpp";
+        std.fs.cwd().access(vendor_path, .{}) catch @panic("voice enabled but vendor/whisper.cpp is missing");
+
+        exe.linkLibC();
+        exe.linkLibCpp();
+        exe.linkSystemLibrary("asound");
+        exe.linkSystemLibrary("pthread");
+        exe.linkSystemLibrary("m");
+        exe.linkSystemLibrary("dl");
+
+        exe.addIncludePath(b.path("vendor/whisper.cpp/include"));
+        exe.addIncludePath(b.path("vendor/whisper.cpp/ggml/include"));
+        exe.addIncludePath(b.path("vendor/whisper.cpp/ggml/src"));
+        exe.addIncludePath(b.path("vendor/whisper.cpp/ggml/src/ggml-cpu"));
+        exe.addIncludePath(b.path("vendor/whisper.cpp/src"));
+
+        const base_c_flags = [_][]const u8{
+            "-std=c11",
+            "-D_GNU_SOURCE",
+            "-D_XOPEN_SOURCE=600",
+            "-D_POSIX_C_SOURCE=200809L",
+            "-DGGML_USE_CPU",
+            "-DGGML_VERSION=\"v1.8.2\"",
+            "-DGGML_COMMIT=\"4979e04\"",
+            "-DWHISPER_VERSION=\"v1.8.2\"",
+        };
+
+        const base_cpp_flags = [_][]const u8{
+            "-std=c++17",
+            "-D_GNU_SOURCE",
+            "-D_XOPEN_SOURCE=600",
+            "-D_POSIX_C_SOURCE=200809L",
+            "-DGGML_USE_CPU",
+            "-DGGML_VERSION=\"v1.8.2\"",
+            "-DGGML_COMMIT=\"4979e04\"",
+            "-DWHISPER_VERSION=\"v1.8.2\"",
+        };
+
+        const vulkan_flag = [_][]const u8{"-DGGML_USE_VULKAN"};
+        const c_flags: []const []const u8 = if (enable_vulkan) &(base_c_flags ++ vulkan_flag) else &base_c_flags;
+        const cpp_flags: []const []const u8 = if (enable_vulkan) &(base_cpp_flags ++ vulkan_flag) else &base_cpp_flags;
+
+        const ggml_c_sources = [_][]const u8{
+            "vendor/whisper.cpp/ggml/src/ggml.c",
+            "vendor/whisper.cpp/ggml/src/ggml-alloc.c",
+            "vendor/whisper.cpp/ggml/src/ggml-quants.c",
+            "vendor/whisper.cpp/ggml/src/ggml-cpu/ggml-cpu.c",
+            "vendor/whisper.cpp/ggml/src/ggml-cpu/quants.c",
+        };
+
+        const ggml_cpp_sources = [_][]const u8{
+            "vendor/whisper.cpp/src/whisper.cpp",
+            "vendor/whisper.cpp/ggml/src/ggml.cpp",
+            "vendor/whisper.cpp/ggml/src/ggml-backend.cpp",
+            "vendor/whisper.cpp/ggml/src/ggml-backend-reg.cpp",
+            "vendor/whisper.cpp/ggml/src/ggml-opt.cpp",
+            "vendor/whisper.cpp/ggml/src/ggml-threading.cpp",
+            "vendor/whisper.cpp/ggml/src/gguf.cpp",
+            "vendor/whisper.cpp/ggml/src/ggml-cpu/ggml-cpu.cpp",
+            "vendor/whisper.cpp/ggml/src/ggml-cpu/repack.cpp",
+            "vendor/whisper.cpp/ggml/src/ggml-cpu/hbm.cpp",
+            "vendor/whisper.cpp/ggml/src/ggml-cpu/traits.cpp",
+            "vendor/whisper.cpp/ggml/src/ggml-cpu/binary-ops.cpp",
+            "vendor/whisper.cpp/ggml/src/ggml-cpu/unary-ops.cpp",
+            "vendor/whisper.cpp/ggml/src/ggml-cpu/vec.cpp",
+            "vendor/whisper.cpp/ggml/src/ggml-cpu/ops.cpp",
+        };
+
+        exe.addCSourceFiles(.{ .files = &ggml_c_sources, .flags = c_flags });
+        exe.addCSourceFiles(.{ .files = &ggml_cpp_sources, .flags = cpp_flags });
+
+        switch (target.result.cpu.arch) {
+            .x86, .x86_64 => {
+                const x86_c_sources = [_][]const u8{
+                    "vendor/whisper.cpp/ggml/src/ggml-cpu/arch/x86/quants.c",
+                };
+                const x86_cpp_sources = [_][]const u8{
+                    "vendor/whisper.cpp/ggml/src/ggml-cpu/arch/x86/repack.cpp",
+                    "vendor/whisper.cpp/ggml/src/ggml-cpu/arch/x86/cpu-feats.cpp",
+                };
+                exe.addCSourceFiles(.{ .files = &x86_c_sources, .flags = c_flags });
+                exe.addCSourceFiles(.{ .files = &x86_cpp_sources, .flags = cpp_flags });
+            },
+            .arm, .aarch64 => {
+                const arm_c_sources = [_][]const u8{
+                    "vendor/whisper.cpp/ggml/src/ggml-cpu/arch/arm/quants.c",
+                };
+                const arm_cpp_sources = [_][]const u8{
+                    "vendor/whisper.cpp/ggml/src/ggml-cpu/arch/arm/repack.cpp",
+                    "vendor/whisper.cpp/ggml/src/ggml-cpu/arch/arm/cpu-feats.cpp",
+                };
+                exe.addCSourceFiles(.{ .files = &arm_c_sources, .flags = c_flags });
+                exe.addCSourceFiles(.{ .files = &arm_cpp_sources, .flags = cpp_flags });
+            },
+            else => @panic("voice only supports x86_64 and aarch64 on linux"),
+        }
+
+        if (enable_vulkan) {
+            const vk_shader_path = "vendor/whisper.cpp/build-vk/ggml/src/ggml-vulkan";
+            std.fs.cwd().access(vk_shader_path ++ "/ggml-vulkan-shaders.hpp", .{}) catch
+                @panic("Vulkan enabled but shaders not built. Run: cd vendor/whisper.cpp && mkdir -p build-vk && cd build-vk && cmake .. -DGGML_VULKAN=ON && make");
+
+            exe.linkSystemLibrary("vulkan");
+            exe.addIncludePath(b.path(vk_shader_path));
+            exe.addIncludePath(b.path("vendor/whisper.cpp/ggml/src/ggml-vulkan"));
+
+            // Main Vulkan backend source
+            exe.addCSourceFiles(.{
+                .files = &[_][]const u8{"vendor/whisper.cpp/ggml/src/ggml-vulkan/ggml-vulkan.cpp"},
+                .flags = cpp_flags,
+            });
+
+            // Generated shader sources (built by CMake)
+            const vk_shader_sources = [_][]const u8{
+                vk_shader_path ++ "/acc.comp.cpp",
+                vk_shader_path ++ "/add.comp.cpp",
+                vk_shader_path ++ "/add_id.comp.cpp",
+                vk_shader_path ++ "/argmax.comp.cpp",
+                vk_shader_path ++ "/argsort.comp.cpp",
+                vk_shader_path ++ "/clamp.comp.cpp",
+                vk_shader_path ++ "/concat.comp.cpp",
+                vk_shader_path ++ "/contig_copy.comp.cpp",
+                vk_shader_path ++ "/conv2d_dw.comp.cpp",
+                vk_shader_path ++ "/conv2d_mm.comp.cpp",
+                vk_shader_path ++ "/conv_transpose_1d.comp.cpp",
+                vk_shader_path ++ "/copy.comp.cpp",
+                vk_shader_path ++ "/copy_from_quant.comp.cpp",
+                vk_shader_path ++ "/copy_to_quant.comp.cpp",
+                vk_shader_path ++ "/cos.comp.cpp",
+                vk_shader_path ++ "/count_equal.comp.cpp",
+                vk_shader_path ++ "/dequant_f32.comp.cpp",
+                vk_shader_path ++ "/dequant_iq1_m.comp.cpp",
+                vk_shader_path ++ "/dequant_iq1_s.comp.cpp",
+                vk_shader_path ++ "/dequant_iq2_s.comp.cpp",
+                vk_shader_path ++ "/dequant_iq2_xs.comp.cpp",
+                vk_shader_path ++ "/dequant_iq2_xxs.comp.cpp",
+                vk_shader_path ++ "/dequant_iq3_s.comp.cpp",
+                vk_shader_path ++ "/dequant_iq3_xxs.comp.cpp",
+                vk_shader_path ++ "/dequant_iq4_nl.comp.cpp",
+                vk_shader_path ++ "/dequant_iq4_xs.comp.cpp",
+                vk_shader_path ++ "/dequant_mxfp4.comp.cpp",
+                vk_shader_path ++ "/dequant_q2_k.comp.cpp",
+                vk_shader_path ++ "/dequant_q3_k.comp.cpp",
+                vk_shader_path ++ "/dequant_q4_0.comp.cpp",
+                vk_shader_path ++ "/dequant_q4_1.comp.cpp",
+                vk_shader_path ++ "/dequant_q4_k.comp.cpp",
+                vk_shader_path ++ "/dequant_q5_0.comp.cpp",
+                vk_shader_path ++ "/dequant_q5_1.comp.cpp",
+                vk_shader_path ++ "/dequant_q5_k.comp.cpp",
+                vk_shader_path ++ "/dequant_q6_k.comp.cpp",
+                vk_shader_path ++ "/dequant_q8_0.comp.cpp",
+                vk_shader_path ++ "/diag_mask_inf.comp.cpp",
+                vk_shader_path ++ "/div.comp.cpp",
+                vk_shader_path ++ "/exp.comp.cpp",
+                vk_shader_path ++ "/flash_attn.comp.cpp",
+                vk_shader_path ++ "/flash_attn_cm1.comp.cpp",
+                vk_shader_path ++ "/flash_attn_cm2.comp.cpp",
+                vk_shader_path ++ "/flash_attn_split_k_reduce.comp.cpp",
+                vk_shader_path ++ "/geglu.comp.cpp",
+                vk_shader_path ++ "/geglu_erf.comp.cpp",
+                vk_shader_path ++ "/geglu_quick.comp.cpp",
+                vk_shader_path ++ "/gelu.comp.cpp",
+                vk_shader_path ++ "/gelu_erf.comp.cpp",
+                vk_shader_path ++ "/gelu_quick.comp.cpp",
+                vk_shader_path ++ "/get_rows.comp.cpp",
+                vk_shader_path ++ "/get_rows_quant.comp.cpp",
+                vk_shader_path ++ "/group_norm.comp.cpp",
+                vk_shader_path ++ "/hardsigmoid.comp.cpp",
+                vk_shader_path ++ "/hardswish.comp.cpp",
+                vk_shader_path ++ "/im2col.comp.cpp",
+                vk_shader_path ++ "/im2col_3d.comp.cpp",
+                vk_shader_path ++ "/l2_norm.comp.cpp",
+                vk_shader_path ++ "/leaky_relu.comp.cpp",
+                vk_shader_path ++ "/mul.comp.cpp",
+                vk_shader_path ++ "/mul_mat_split_k_reduce.comp.cpp",
+                vk_shader_path ++ "/mul_mat_vec.comp.cpp",
+                vk_shader_path ++ "/mul_mat_vec_iq1_m.comp.cpp",
+                vk_shader_path ++ "/mul_mat_vec_iq1_s.comp.cpp",
+                vk_shader_path ++ "/mul_mat_vec_iq2_s.comp.cpp",
+                vk_shader_path ++ "/mul_mat_vec_iq2_xs.comp.cpp",
+                vk_shader_path ++ "/mul_mat_vec_iq2_xxs.comp.cpp",
+                vk_shader_path ++ "/mul_mat_vec_iq3_s.comp.cpp",
+                vk_shader_path ++ "/mul_mat_vec_iq3_xxs.comp.cpp",
+                vk_shader_path ++ "/mul_mat_vec_nc.comp.cpp",
+                vk_shader_path ++ "/mul_mat_vec_p021.comp.cpp",
+                vk_shader_path ++ "/mul_mat_vec_q2_k.comp.cpp",
+                vk_shader_path ++ "/mul_mat_vec_q3_k.comp.cpp",
+                vk_shader_path ++ "/mul_mat_vec_q4_k.comp.cpp",
+                vk_shader_path ++ "/mul_mat_vec_q5_k.comp.cpp",
+                vk_shader_path ++ "/mul_mat_vec_q6_k.comp.cpp",
+                vk_shader_path ++ "/mul_mat_vecq.comp.cpp",
+                vk_shader_path ++ "/mul_mm.comp.cpp",
+                vk_shader_path ++ "/mul_mm_cm2.comp.cpp",
+                vk_shader_path ++ "/mul_mmq.comp.cpp",
+                vk_shader_path ++ "/multi_add.comp.cpp",
+                vk_shader_path ++ "/norm.comp.cpp",
+                vk_shader_path ++ "/opt_step_adamw.comp.cpp",
+                vk_shader_path ++ "/opt_step_sgd.comp.cpp",
+                vk_shader_path ++ "/pad.comp.cpp",
+                vk_shader_path ++ "/pool2d.comp.cpp",
+                vk_shader_path ++ "/quantize_q8_1.comp.cpp",
+                vk_shader_path ++ "/reglu.comp.cpp",
+                vk_shader_path ++ "/relu.comp.cpp",
+                vk_shader_path ++ "/repeat.comp.cpp",
+                vk_shader_path ++ "/repeat_back.comp.cpp",
+                vk_shader_path ++ "/rms_norm.comp.cpp",
+                vk_shader_path ++ "/rms_norm_back.comp.cpp",
+                vk_shader_path ++ "/rms_norm_partials.comp.cpp",
+                vk_shader_path ++ "/roll.comp.cpp",
+                vk_shader_path ++ "/rope_multi.comp.cpp",
+                vk_shader_path ++ "/rope_neox.comp.cpp",
+                vk_shader_path ++ "/rope_norm.comp.cpp",
+                vk_shader_path ++ "/rope_vision.comp.cpp",
+                vk_shader_path ++ "/scale.comp.cpp",
+                vk_shader_path ++ "/sigmoid.comp.cpp",
+                vk_shader_path ++ "/silu.comp.cpp",
+                vk_shader_path ++ "/silu_back.comp.cpp",
+                vk_shader_path ++ "/sin.comp.cpp",
+                vk_shader_path ++ "/soft_max.comp.cpp",
+                vk_shader_path ++ "/soft_max_back.comp.cpp",
+                vk_shader_path ++ "/sqrt.comp.cpp",
+                vk_shader_path ++ "/square.comp.cpp",
+                vk_shader_path ++ "/sub.comp.cpp",
+                vk_shader_path ++ "/sum_rows.comp.cpp",
+                vk_shader_path ++ "/swiglu.comp.cpp",
+                vk_shader_path ++ "/swiglu_oai.comp.cpp",
+                vk_shader_path ++ "/tanh.comp.cpp",
+                vk_shader_path ++ "/timestep_embedding.comp.cpp",
+                vk_shader_path ++ "/upscale.comp.cpp",
+                vk_shader_path ++ "/wkv6.comp.cpp",
+                vk_shader_path ++ "/wkv7.comp.cpp",
+            };
+            exe.addCSourceFiles(.{ .files = &vk_shader_sources, .flags = cpp_flags });
+        }
+    }
 
     // This declares intent for the executable to be installed into the
     // install prefix when running `zig build` (i.e. when executing the default

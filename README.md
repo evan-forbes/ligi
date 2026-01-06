@@ -158,6 +158,40 @@ ligi backup --install                # install daily cron job
 ligi backup -i -s "0 */6 * * *"      # every 6 hours
 ```
 
+### `ligi v` / `ligi voice`
+
+Record audio from the microphone and transcribe locally using whisper.cpp. Linux only.
+
+```bash
+ligi v                           # record and transcribe (default: 10m timeout, base.en model)
+ligi v --timeout 5m              # limit recording to 5 minutes
+ligi v --model-size small.en     # use smaller/faster model
+ligi v --model-size large        # use large multilingual model
+ligi v --model ~/my-model.bin    # use custom model file
+ligi v --no-download             # fail if model not cached (don't download)
+ligi v -c                        # copy transcript to clipboard
+```
+
+**Controls during recording:**
+- `Ctrl+C` or `Esc` - cancel recording
+- `Space` - pause/resume recording
+
+**Model sizes:** `tiny`, `base`, `small`, `medium`, `large` (multilingual) or `tiny.en`, `base.en`, `small.en`, `medium.en` (English-only, faster).
+
+Models are cached in `~/.cache/ligi/whisper/` and downloaded automatically on first use.
+
+**Building with voice support:**
+
+Voice requires ALSA development libraries and is built separately:
+
+```bash
+# Install dependencies (Debian/Ubuntu)
+sudo apt install libasound2-dev
+
+# Build and install with voice support
+make voice
+```
+
 ## Configuration
 
 `art/config/ligi.toml`:
