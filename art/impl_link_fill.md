@@ -1,6 +1,14 @@
-[[t/TODO]](index/tags/TODO.md)
+[[t/TODO]](index/tags/TODO.md) [[t/partial]](index/tags/partial.md)
 
 # Ligi Link Filling Implementation Plan
+
+## Status
+
+| Feature | Status |
+|---------|--------|
+| `[[t/tag_name]]` tag links | ✅ Complete |
+| `[[Title of Note]]` exact title links | ❌ Not started |
+| `[[f/search query]]` fuzzy links | ❌ Not started |
 
 ## Executive Summary
 

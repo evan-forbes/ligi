@@ -148,6 +148,14 @@ ligi serve -p 3000 --open      # custom port, open browser
 ligi serve -r ./docs           # serve different directory
 ```
 
+### `ligi lsp`
+
+Start the LSP server for editor completions (tags + `[[...]]` file links).
+
+```bash
+ligi lsp
+```
+
 ### `ligi backup`
 
 Backup `~/.ligi` (must be a git repo).
@@ -191,6 +199,22 @@ sudo apt install libasound2-dev
 # Build and install with voice support
 make voice
 ```
+
+## Editor Integration (Helix)
+
+Add the Ligi LSP server to your Helix `languages.toml` for Markdown:
+
+```toml
+[[language]]
+name = "markdown"
+language-servers = ["ligi-lsp"]
+
+[language-server.ligi-lsp]
+command = "ligi"
+args = ["lsp"]
+```
+
+With the Helix fork change in this repo, Tab will trigger completions after `[[` or `[[t/` in Markdown.
 
 ## Configuration
 

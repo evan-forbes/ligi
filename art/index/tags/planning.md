@@ -4,4 +4,4 @@ This file is auto-maintained by ligi.
 
 ## Files
 
-- art/ligi_tags.md
+- [art/ligi_tags.md](../../ligi_tags.md)
