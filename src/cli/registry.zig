@@ -278,6 +278,7 @@ const IndexParams = clap.parseParamsComptime(
     \\-h, --help         Show this help message
     \\-r, --root <str>   Repository root directory
     \\-f, --file <str>   Index single file only
+    \\-t, --tags <str>   Add tags to file frontmatter (comma-separated, requires --file)
     \\-g, --global       Rebuild global tag indexes from all repos
     \\--no-local         Do not update local tag indexes (with --global)
     \\-q, --quiet        Suppress non-error output
@@ -667,6 +668,7 @@ fn runIndexCommand(
         try stdout.writeAll("\nOptions:\n");
         try stdout.writeAll("  -r, --root <path>   Repository root directory\n");
         try stdout.writeAll("  -f, --file <path>   Index single file only\n");
+        try stdout.writeAll("  -t, --tags <tags>   Add tags to file frontmatter (comma-separated, requires --file)\n");
         try stdout.writeAll("  -g, --global        Rebuild global tag indexes from all repos\n");
         try stdout.writeAll("  --no-local          Do not update local tag indexes (with --global)\n");
         try stdout.writeAll("  -q, --quiet         Suppress non-error output\n");
@@ -680,6 +682,7 @@ fn runIndexCommand(
         allocator,
         res.args.root,
         res.args.file,
+        res.args.tags,
         res.args.global != 0,
         res.args.@"no-local" != 0,
         quiet,

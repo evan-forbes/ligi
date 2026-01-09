@@ -1,4 +1,4 @@
-[[t/TODO]](index/tags/TODO.md)
+[[t/TODO]](index/tags/TODO.md) [[t/query]](index/tags/query.md) [[t/cli]](index/tags/cli.md)
 
 # Implementation Plan: `ligi q g` (Graph Query)
 

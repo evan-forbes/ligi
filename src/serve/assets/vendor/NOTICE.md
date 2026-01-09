@@ -16,6 +16,13 @@ This directory contains third-party libraries used by the ligi serve command.
 - **Repository**: https://github.com/mermaid-js/mermaid
 - **Copyright**: Copyright (c) 2014-2024 Knut Sveidqvist
 
+## highlight.js
+
+- **Version**: 11.9.0
+- **License**: BSD-3-Clause
+- **Repository**: https://github.com/highlightjs/highlight.js
+- **Copyright**: Copyright (c) 2006, Ivan Sagalaev
+
 ---
 
-Both libraries are distributed under the MIT License, which permits use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, provided the copyright notice and permission notice are included in all copies or substantial portions of the Software.
+Each library is distributed under its respective license listed above. Please include the relevant copyright and license notices when redistributing these assets.

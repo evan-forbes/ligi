@@ -83,6 +83,26 @@ pub fn readFile(allocator: std.mem.Allocator, path: []const u8) errors.Result([]
     return .{ .ok = content };
 }
 
+/// Write content to a file, overwriting if it exists.
+pub fn writeFile(path: []const u8, content: []const u8) errors.Result(void) {
+    const file = std.fs.cwd().createFile(path, .{}) catch {
+        return .{ .err = errors.LigiError.filesystem(
+            "failed to create file",
+            null,
+        ) };
+    };
+    defer file.close();
+
+    file.writeAll(content) catch {
+        return .{ .err = errors.LigiError.filesystem(
+            "failed to write file",
+            null,
+        ) };
+    };
+
+    return .{ .ok = {} };
+}
+
 // ============================================================================
 // Tests
 // ============================================================================

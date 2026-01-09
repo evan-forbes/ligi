@@ -67,6 +67,8 @@ pub const styles_css = @embedFile("assets/styles.css");
 pub const vendor = struct {
     pub const marked_js = @embedFile("assets/vendor/marked.min.js");
     pub const mermaid_js = @embedFile("assets/vendor/mermaid.min.js");
+    pub const highlight_js = @embedFile("assets/vendor/highlight.min.js");
+    pub const highlight_css = @embedFile("assets/vendor/highlight.min.css");
 };
 
 /// Asset lookup by path
@@ -88,6 +90,14 @@ pub fn getAsset(path: []const u8) ?[]const u8 {
         std.mem.eql(u8, clean_path, "vendor/mermaid.min.js"))
     {
         return vendor.mermaid_js;
+    } else if (std.mem.eql(u8, clean_path, "assets/vendor/highlight.min.js") or
+        std.mem.eql(u8, clean_path, "vendor/highlight.min.js"))
+    {
+        return vendor.highlight_js;
+    } else if (std.mem.eql(u8, clean_path, "assets/vendor/highlight.min.css") or
+        std.mem.eql(u8, clean_path, "vendor/highlight.min.css"))
+    {
+        return vendor.highlight_css;
     }
 
     return null;
@@ -134,6 +144,8 @@ test "getAsset returns app assets" {
 test "getAsset returns vendor assets" {
     try std.testing.expect(getAsset("assets/vendor/marked.min.js") != null);
     try std.testing.expect(getAsset("assets/vendor/mermaid.min.js") != null);
+    try std.testing.expect(getAsset("assets/vendor/highlight.min.js") != null);
+    try std.testing.expect(getAsset("assets/vendor/highlight.min.css") != null);
 }
 
 test "getAsset returns null for unknown paths" {

@@ -4,7 +4,7 @@ const std = @import("std");
 const errors = @import("errors.zig");
 
 /// Special directories that exist under art/
-pub const SPECIAL_DIRS = [_][]const u8{ "index", "template", "config", "archive" };
+pub const SPECIAL_DIRS = [_][]const u8{ "index", "template", "config", "archive", "inbox" };
 
 /// Get the global ligi root directory (~/.ligi)
 pub fn getGlobalRoot(allocator: std.mem.Allocator) errors.Result([]const u8) {
@@ -131,12 +131,13 @@ test "getLocalArtPath joins root with art/" {
     try std.testing.expectEqualStrings("/some/project/art", path);
 }
 
-test "SPECIAL_DIRS contains correct four directories" {
-    try std.testing.expectEqual(@as(usize, 4), SPECIAL_DIRS.len);
+test "SPECIAL_DIRS contains correct directories" {
+    try std.testing.expectEqual(@as(usize, 5), SPECIAL_DIRS.len);
     try std.testing.expectEqualStrings("index", SPECIAL_DIRS[0]);
     try std.testing.expectEqualStrings("template", SPECIAL_DIRS[1]);
     try std.testing.expectEqualStrings("config", SPECIAL_DIRS[2]);
     try std.testing.expectEqualStrings("archive", SPECIAL_DIRS[3]);
+    try std.testing.expectEqualStrings("inbox", SPECIAL_DIRS[4]);
 }
 
 test "joinPath handles multiple segments" {

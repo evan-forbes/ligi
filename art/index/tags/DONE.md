@@ -9,3 +9,4 @@ This file is auto-maintained by ligi.
 - [art/impl_init.md](../../impl_init.md)
 - [art/impl_tagging_system.md](../../impl_tagging_system.md)
 - [art/impl_templating_migration.md](../../impl_templating_migration.md)
+- [art/ligi_serve.md](../../ligi_serve.md)

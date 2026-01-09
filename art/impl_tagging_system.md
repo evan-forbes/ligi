@@ -1,4 +1,4 @@
-[[t/DONE]](index/tags/DONE.md)
+[[t/DONE]](index/tags/DONE.md) [[t/tagging]](index/tags/tagging.md) [[t/cli]](index/tags/cli.md) [[t/query]](index/tags/query.md)
 
 # Ligi Tagging System Implementation Plan
 

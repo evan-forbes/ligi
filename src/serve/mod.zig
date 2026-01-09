@@ -72,14 +72,12 @@ fn handleConnection(
     var connection_writer = conn.stream.writer(&send_buffer);
     var http_server: std.http.Server = .init(connection_reader.interface(), &connection_writer.interface);
 
-    while (true) {
-        var request = http_server.receiveHead() catch |err| {
-            if (err == error.HttpConnectionClosing) return;
-            return err;
-        };
+    var request = http_server.receiveHead() catch |err| {
+        if (err == error.HttpConnectionClosing) return;
+        return err;
+    };
 
-        try handleRequest(allocator, &request, config, stdout, stderr);
-    }
+    try handleRequest(allocator, &request, config, stdout, stderr);
 }
 
 /// Handle a single HTTP request
@@ -94,6 +92,7 @@ fn handleRequest(
 
     // Log the request
     try stdout.print("{s} {s}\n", .{ @tagName(request.head.method), target });
+    try stdout.flush();
 
     // Parse the path (remove query string)
     const path_end = std.mem.indexOfScalar(u8, target, '?') orelse target.len;
@@ -301,6 +300,7 @@ fn sendResponse(
 ) !void {
     try request.respond(body, .{
         .status = status,
+        .keep_alive = false,
         .extra_headers = &.{
             .{ .name = "Content-Type", .value = content_type },
             .{ .name = "Access-Control-Allow-Origin", .value = "*" },

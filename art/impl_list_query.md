@@ -1,3 +1,5 @@
+[[t/TODO]](index/tags/TODO.md) [[t/query]](index/tags/query.md) [[t/cli]](index/tags/cli.md) [[t/tagging]](index/tags/tagging.md)
+
 # Short Implementation Plan: List Tags Query Command
 
 ## Summary

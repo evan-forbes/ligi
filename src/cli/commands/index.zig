@@ -18,6 +18,7 @@ pub fn run(
     allocator: std.mem.Allocator,
     root: ?[]const u8,
     file: ?[]const u8,
+    tags_arg: ?[]const u8,
     global: bool,
     no_local: bool,
     quiet: bool,
@@ -29,9 +30,19 @@ pub fn run(
     defer arena.deinit();
     const arena_alloc = arena.allocator();
 
+    // Validate --tags requires --file
+    if (tags_arg != null and file == null) {
+        try stderr.writeAll("error: --tags requires --file\n");
+        return 1;
+    }
+
     if (global) {
         if (file != null) {
             try stderr.writeAll("error: --file is not compatible with --global\n");
+            return 1;
+        }
+        if (tags_arg != null) {
+            try stderr.writeAll("error: --tags is not compatible with --global\n");
             return 1;
         }
         if (root != null) {
@@ -104,6 +115,17 @@ pub fn run(
         if (!fs.fileExists(full_file_path)) {
             try stderr.print("error: file not found: {s}\n", .{full_file_path});
             return 1;
+        }
+
+        // If --tags is provided, insert tags into the file before indexing
+        if (tags_arg) |tags_str| {
+            const tags_added = insertTagsIntoFile(arena_alloc, full_file_path, tags_str, stdout, stderr, quiet) catch {
+                // Error message already printed by insertTagsIntoFile
+                return 1;
+            };
+            if (!quiet and tags_added > 0) {
+                try stdout.print("added {d} tag(s) to {s}\n", .{ tags_added, f });
+            }
         }
     }
 
@@ -179,6 +201,153 @@ pub fn run(
     }
 
     return 0;
+}
+
+/// Insert tags into a file's frontmatter or at the top of the file.
+/// Tags are added as [[t/tag_name]] format.
+/// Returns the number of tags added.
+fn insertTagsIntoFile(
+    allocator: std.mem.Allocator,
+    file_path: []const u8,
+    tags_str: []const u8,
+    stdout: anytype,
+    stderr: anytype,
+    quiet: bool,
+) !usize {
+    _ = stdout;
+
+    // Parse comma-separated tags
+    var tags: std.ArrayList([]const u8) = .empty;
+    defer tags.deinit(allocator);
+
+    var it = std.mem.splitScalar(u8, tags_str, ',');
+    while (it.next()) |tag_raw| {
+        const tag = std.mem.trim(u8, tag_raw, " \t");
+        if (tag.len > 0) {
+            // Validate tag name
+            const validation = tag_index.isValidTagName(tag);
+            if (validation != .valid) {
+                switch (validation) {
+                    .empty => try stderr.print("error: empty tag name\n", .{}),
+                    .too_long => try stderr.print("error: tag name too long: '{s}'\n", .{tag}),
+                    .path_traversal => try stderr.print("error: path traversal in tag name: '{s}'\n", .{tag}),
+                    .invalid_char => |c| try stderr.print("error: invalid character '{c}' in tag name '{s}' (allowed: A-Za-z0-9_-./)\n", .{ c, tag }),
+                    .valid => unreachable,
+                }
+                return error.InvalidTagName;
+            }
+            try tags.append(allocator, tag);
+        }
+    }
+
+    if (tags.items.len == 0) {
+        return 0;
+    }
+
+    // Read existing file content
+    const content = switch (fs.readFile(allocator, file_path)) {
+        .ok => |c| c,
+        .err => |e| {
+            try stderr.print("error: failed to read file {s}: {s}\n", .{ file_path, e.context.message });
+            return error.ReadError;
+        },
+    };
+    defer allocator.free(content);
+
+    // Check which tags already exist in the file
+    var new_tags: std.ArrayList([]const u8) = .empty;
+    defer new_tags.deinit(allocator);
+
+    for (tags.items) |tag| {
+        // Build the tag pattern to search for
+        const tag_pattern = try std.fmt.allocPrint(allocator, "[[t/{s}]]", .{tag});
+        defer allocator.free(tag_pattern);
+
+        if (std.mem.indexOf(u8, content, tag_pattern) == null) {
+            try new_tags.append(allocator, tag);
+        } else if (!quiet) {
+            // Tag already exists, skip silently unless verbose
+        }
+    }
+
+    if (new_tags.items.len == 0) {
+        return 0; // All tags already exist
+    }
+
+    // Build the tags line to insert
+    var tags_line: std.ArrayList(u8) = .empty;
+    defer tags_line.deinit(allocator);
+
+    for (new_tags.items, 0..) |tag, i| {
+        if (i > 0) {
+            try tags_line.appendSlice(allocator, " ");
+        }
+        try tags_line.appendSlice(allocator, "[[t/");
+        try tags_line.appendSlice(allocator, tag);
+        try tags_line.appendSlice(allocator, "]]");
+    }
+    try tags_line.appendSlice(allocator, "\n");
+
+    // Find where to insert the tags
+    // Strategy: Insert after the first heading (# line) if present, otherwise at the top
+    var insert_pos: usize = 0;
+    var found_heading = false;
+
+    // Look for first markdown heading
+    var line_start: usize = 0;
+    for (content, 0..) |c, i| {
+        if (c == '\n' or i == content.len - 1) {
+            const line_end = if (c == '\n') i else i + 1;
+            const line = content[line_start..line_end];
+
+            // Check if this line is a heading
+            const trimmed = std.mem.trimLeft(u8, line, " \t");
+            if (trimmed.len > 0 and trimmed[0] == '#') {
+                // Found a heading, insert after this line
+                insert_pos = if (c == '\n') i + 1 else line_end;
+                found_heading = true;
+                break;
+            }
+
+            line_start = i + 1;
+        }
+    }
+
+    // If no heading found, insert at the very top
+    if (!found_heading) {
+        insert_pos = 0;
+    }
+
+    // Build new content
+    var new_content: std.ArrayList(u8) = .empty;
+    defer new_content.deinit(allocator);
+
+    try new_content.appendSlice(allocator, content[0..insert_pos]);
+
+    // Add a newline before tags if inserting after heading and there isn't one
+    if (found_heading and insert_pos > 0 and content[insert_pos - 1] != '\n') {
+        try new_content.appendSlice(allocator, "\n");
+    }
+
+    try new_content.appendSlice(allocator, tags_line.items);
+
+    // Add a newline after tags if the next content doesn't start with one
+    if (insert_pos < content.len and content[insert_pos] != '\n') {
+        try new_content.appendSlice(allocator, "\n");
+    }
+
+    try new_content.appendSlice(allocator, content[insert_pos..]);
+
+    // Write the new content back to the file
+    switch (fs.writeFile(file_path, new_content.items)) {
+        .ok => {},
+        .err => |e| {
+            try stderr.print("error: failed to write file {s}: {s}\n", .{ file_path, e.context.message });
+            return error.WriteError;
+        },
+    }
+
+    return new_tags.items.len;
 }
 
 // ============================================================================

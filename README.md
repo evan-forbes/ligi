@@ -2,15 +2,13 @@
 
 > pronounced LEE-ghee, ligi is Esperanto for the verb "to link, connect, or tie"
 
-A CLI tool for managing project artifacts as plain markdown. Replaces Obsidian-style document linking and GitHub project management with a git-native, LLM-friendly system.
+Ligi is an opinionated, minimal Obsidian-like system written in Zig. It is CLI-first, expects you to keep using your existing text editor, and is built for humans to effectively generate code via LLMs, instead of "vibe coding". This is done via first generating and reviewing planning documents such as specs, ADRs, and implementation plans before proceeding with the actual generation of the code.
+
+Notes are itemized markdown artifacts that can span many repos and projects. There is a global view in `~/.ligi` that aggregates registered repos, and you can also keep smaller scoped views for a company or team by initializing Ligi in a separate workspace. Voice input is built in via whisper.cpp, with Vulkan acceleration when available.
 
 ## Why
 
-Software projects accumulate context: design decisions, task lists, meeting notes, specs. This context typically lives in scattered locations—Notion, GitHub issues, Obsidian vaults, Slack threads—none of which are version-controlled with the code or easily consumed by LLMs.
-
-ligi stores everything in `art/` as markdown files with wiki-style tags. The format is trivial for both humans and LLMs to read and write. When an LLM agent needs project context, it reads markdown. When it produces artifacts, it writes markdown. No API calls, no context window gymnastics.
-
-The practical result: teams using LLM agents can coordinate through shared artifacts at significantly higher velocity. The agents read the same docs humans do.
+Software projects collect decisions, tasks, specs, and meeting notes. Those notes usually end up scattered across tools that do not live with the code and are awkward for LLMs to read. Ligi keeps the context next to the repo in plain markdown under `art/`. The same files are easy for humans to read and for LLMs to write.
 
 ## Install
 
@@ -19,6 +17,13 @@ zig build -Doptimize=ReleaseSafe
 ```
 
 Requires Zig 0.15+.
+
+Optional voice support on Linux:
+
+```
+sudo apt install libasound2-dev
+make voice
+```
 
 ## Quick Start
 
@@ -36,7 +41,7 @@ ligi index
 ligi query t planning
 
 # Serve locally with rendered markdown
-ligi serve --open
+ligi serve
 ```
 
 ## Directory Structure
@@ -47,7 +52,7 @@ repo/
 │   ├── index/
 │   │   ├── ligi_tags.md      # master tag index
 │   │   └── tags/             # per-tag indexes
-│   ├── template/             # prompt/report templates
+│   ├── template/             # prompt and report templates
 │   ├── config/
 │   │   └── ligi.toml
 │   └── archive/              # soft-deleted docs
@@ -68,21 +73,14 @@ See [art/ligi_tags.md](art/ligi_tags.md) for full details.
 
 ### `ligi init`
 
-Creates the `art/` directory structure and registers the repo in the global index.
-
-```bash
-ligi init              # local repo
-ligi init --global     # ~/.ligi
-```
+Creates the `art/` directory structure and registers the repo in the global index. It also generates or updates `AGENTS.md` with instructions for LLMs to use Ligi in that repo. Use the global mode to create `~/.ligi`.
 
 ### `ligi index` / `ligi i`
 
-Scans markdown files for tags, builds index files.
+Scans markdown files for tags, builds index files. You can index a single file or rebuild global indexes across all repos.
 
 ```bash
-ligi index                    # index current repo
-ligi index --file path.md     # index single file
-ligi index --global           # rebuild global indexes from all repos
+ligi index
 ```
 
 ### `ligi query t` / `ligi q t`
@@ -99,12 +97,7 @@ ligi q t planning -c           # copy to clipboard
 
 ### `ligi check`
 
-Validates the global index. Reports broken repo paths, missing `art/` directories.
-
-```bash
-ligi check              # list all repos with status
-ligi check --prune      # remove broken entries
-```
+Validates the global index. It can also prune broken entries.
 
 Output:
 ```
@@ -115,7 +108,7 @@ Output:
 
 ### `ligi template fill` / `ligi t f`
 
-Fill TOML-frontmatter templates interactively.
+Fill TOML frontmatter templates interactively.
 
 ```bash
 ligi t f art/template/standup.md    # fill specific template
@@ -140,81 +133,39 @@ Items completed: {{ count }}
 
 ### `ligi serve` / `ligi s`
 
-Local HTTP server for rendered markdown. Supports GFM and Mermaid diagrams.
+Local HTTP server for rendered markdown. Supports GFM and Mermaid diagrams. Use the open option to launch a browser, or set a custom port and root directory.
 
 ```bash
 ligi serve                     # serve ./art on :8777
-ligi serve -p 3000 --open      # custom port, open browser
+ligi serve -p 3000             # custom port
 ligi serve -r ./docs           # serve different directory
-```
-
-### `ligi lsp`
-
-Start the LSP server for editor completions (tags + `[[...]]` file links).
-
-```bash
-ligi lsp
 ```
 
 ### `ligi backup`
 
-Backup `~/.ligi` (must be a git repo).
+Backup `~/.ligi` (must be a git repo). You can install a cron job and set a schedule.
 
 ```bash
 ligi backup                          # run backup now
-ligi backup --install                # install daily cron job
 ligi backup -i -s "0 */6 * * *"      # every 6 hours
 ```
 
 ### `ligi v` / `ligi voice`
 
-Record audio from the microphone and transcribe locally using whisper.cpp. Linux only.
+Record audio from the microphone and transcribe locally using whisper.cpp. Linux only. Supports time limits, model size selection, custom model files, offline mode, and clipboard copy. Vulkan acceleration is used when available.
 
 ```bash
-ligi v                           # record and transcribe (default: 10m timeout, base.en model)
-ligi v --timeout 5m              # limit recording to 5 minutes
-ligi v --model-size small.en     # use smaller/faster model
-ligi v --model-size large        # use large multilingual model
-ligi v --model ~/my-model.bin    # use custom model file
-ligi v --no-download             # fail if model not cached (don't download)
+ligi v                           # record and transcribe
 ligi v -c                        # copy transcript to clipboard
 ```
 
-**Controls during recording:**
+Controls during recording:
 - `Ctrl+C` or `Esc` - cancel recording
-- `Space` - pause/resume recording
+- `Space` - pause or resume recording
 
-**Model sizes:** `tiny`, `base`, `small`, `medium`, `large` (multilingual) or `tiny.en`, `base.en`, `small.en`, `medium.en` (English-only, faster).
+Model sizes: `tiny`, `base`, `small`, `medium`, `large` or the English-only variants `tiny.en`, `base.en`, `small.en`, `medium.en`.
 
-Models are cached in `~/.cache/ligi/whisper/` and downloaded automatically on first use.
-
-**Building with voice support:**
-
-Voice requires ALSA development libraries and is built separately:
-
-```bash
-# Install dependencies (Debian/Ubuntu)
-sudo apt install libasound2-dev
-
-# Build and install with voice support
-make voice
-```
-
-## Editor Integration (Helix)
-
-Add the Ligi LSP server to your Helix `languages.toml` for Markdown:
-
-```toml
-[[language]]
-name = "markdown"
-language-servers = ["ligi-lsp"]
-
-[language-server.ligi-lsp]
-command = "ligi"
-args = ["lsp"]
-```
-
-With the Helix fork change in this repo, Tab will trigger completions after `[[` or `[[t/` in Markdown.
+Models are cached in `~/.cache/ligi/whisper/` and downloaded automatically on first use unless offline mode is selected.
 
 ## Configuration
 
@@ -233,20 +184,20 @@ default_format = "text"
 
 ## Use Cases
 
-**Replace GitHub Issues**: Create `art/issues/` with one markdown file per issue. Tag with `[[t/open]]`, `[[t/bug]]`, `[[t/p0]]`. Query with `ligi q t open & bug`.
+Replace GitHub Issues: keep one markdown file per item in `art/`, tag with `[[t/open]]`, `[[t/bug]]`, `[[t/p0]]`. Query with `ligi q t open & bug`. The bug tag and status tags act as the issue tracker.
 
-**Replace Project Boards**: Tag docs with `[[t/todo]]`, `[[t/in-progress]]`, `[[t/done]]`. Move tags as status changes. Everything is in git history.
+Replace project boards: tag docs with `[[t/todo]]`, `[[t/in-progress]]`, `[[t/done]]`. Move tags as status changes. Everything is in git history.
 
-**Obsidian-style Linking**: Tags function like backlinks. The index maintains bidirectional references. No proprietary sync, no cloud dependency.
+Obsidian-like linking: tags function like backlinks. The index maintains bidirectional references. No proprietary sync, no cloud dependency.
 
-**LLM Context**: Point agents at `art/` for project context. The markdown is self-describing. Agents can create and tag new artifacts directly.
+LLM context: point agents at `art/` for project context. The markdown is self-describing. Agents can create and tag new artifacts directly.
 
 ## Design Principles
 
 - Plain markdown, always
-- Git-native (no external databases)
+- Git-native, no external databases
 - Index files are human-readable markdown
-- Safe by default (path traversal protection)
+- Safe by default with path traversal protection
 - No network dependencies for core functionality
 
 ## License

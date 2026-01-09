@@ -192,6 +192,10 @@ html, body {
     font-size: 100%;
 }
 
+.markdown-body pre code.hljs {
+    background: transparent;
+}
+
 .markdown-body blockquote {
     padding: 0 1em;
     color: var(--text-secondary);

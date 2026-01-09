@@ -1,11 +1,10 @@
+[[t/DONE]](index/tags/DONE.md) [[t/browser]](index/tags/browser.md) [[t/cli]](index/tags/cli.md)
+
 # Ligi `serve` Command Implementation Plan
 
 ## Executive Summary
 
 This plan defines how `ligi serve` will run a local HTTP server that lets a browser render Markdown files with GitHub Flavored Markdown (GFM) semantics and Mermaid diagrams. The server will be self-contained (no CDN), safe by default (path traversal protection), and simple to operate from a repo root.
-
----
-
 ## Goals
 
 - Serve Markdown files from a repo (default `./art`, fallback `.`) to a browser.

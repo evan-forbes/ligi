@@ -1,4 +1,4 @@
-[[t/TODO]](index/tags/TODO.md)
+[[t/TODO]](index/tags/TODO.md) [[t/browser]](index/tags/browser.md) [[t/cli]](index/tags/cli.md)
 
 # Ligi Table Rendering Implementation Plan
 

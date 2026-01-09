@@ -31,15 +31,14 @@ pub const INITIAL_ART_README =
     \\- `template/` prompt/report templates
     \\- `config/`   Ligi config (e.g., `ligi.toml`)
     \\- `archive/`  soft-delete area for retired docs
+    \\- `media/`    images and diagrams for markdown docs
+    \\- `data/`     CSV/JSONL files for tables and visualizations
+    \\- `inbox/`    work-in-progress documents before final placement
     \\
     \\Docs:
     \\- `ligi_art.md` explains the art directory
     \\- `ligi_templates.md` explains templates
     \\- `ligi_tags.md` explains tags
-    \\
-    \\Related directories:
-    \\- [media](../media/README.md) - images and diagrams for markdown docs
-    \\- [data](../data/README.md) - CSV/JSONL files for tables and visualizations
     \\
     \\Please treat `art/` as durable project context. Avoid deleting or moving files
     \\here unless explicitly requested; prefer `archive/` for cleanup. See
@@ -59,10 +58,9 @@ pub const INITIAL_LIGI_ART_DOC =
     \\- `template/` reusable templates
     \\- `config/` ligi config
     \\- `archive/` retired docs
-    \\
-    \\Guidelines:
-    \\- Add notes, plans, logs, and other context here.
-    \\- Avoid delete/move; archive instead.
+    \\- `media/` images and diagrams
+    \\- `data/` structured data files
+    \\- `inbox/` work-in-progress documents
     \\
 ;
 
@@ -167,6 +165,27 @@ pub const INITIAL_DATA_README =
     \\- Use descriptive filenames (e.g., `metrics-2024.csv`)
     \\- Include a header row in CSV files
     \\- Use JSONL for semi-structured or nested data
+    \\
+;
+
+/// Initial content for inbox/README.md
+pub const INITIAL_INBOX_README =
+    \\# inbox/
+    \\
+    \\This directory is for work-in-progress documents. Use it to iterate on drafts
+    \\before promoting them to their final location in `art/`.
+    \\
+    \\Workflow:
+    \\1. Create and edit documents here while they're in progress
+    \\2. When ready, move them to `art/` with tags:
+    \\   ```bash
+    \\   ligi index art/inbox/file.md -t todo,feature,tag_name
+    \\   ```
+    \\   This adds the tags to the file's frontmatter and indexes it.
+    \\3. Then move the file to its final location in `art/`
+    \\
+    \\The inbox is not indexed by default during `ligi index` to keep your
+    \\work-in-progress separate from finalized artifacts.
     \\
 ;
 
@@ -280,8 +299,8 @@ pub fn run(
     defer allocator.free(agents_path);
     try createFileTracked(allocator, agents_path, INITIAL_AGENTS, &result);
 
-    // 5. media/ directory and README
-    const media_path = try paths.joinPath(allocator, &.{ base_path, "media" });
+    // 5. media/ directory and README (inside art/)
+    const media_path = try paths.joinPath(allocator, &.{ art_path, "media" });
     defer allocator.free(media_path);
     try createDirTracked(allocator, media_path, &result);
 
@@ -289,8 +308,8 @@ pub fn run(
     defer allocator.free(media_readme_path);
     try createFileTracked(allocator, media_readme_path, INITIAL_MEDIA_README, &result);
 
-    // 6. data/ directory and README
-    const data_path = try paths.joinPath(allocator, &.{ base_path, "data" });
+    // 6. data/ directory and README (inside art/)
+    const data_path = try paths.joinPath(allocator, &.{ art_path, "data" });
     defer allocator.free(data_path);
     try createDirTracked(allocator, data_path, &result);
 
@@ -298,7 +317,16 @@ pub fn run(
     defer allocator.free(data_readme_path);
     try createFileTracked(allocator, data_readme_path, INITIAL_DATA_README, &result);
 
-    // 7. Config file
+    // 7. inbox/ directory and README (inside art/)
+    const inbox_path = try paths.joinPath(allocator, &.{ art_path, "inbox" });
+    defer allocator.free(inbox_path);
+    try createDirTracked(allocator, inbox_path, &result);
+
+    const inbox_readme_path = try paths.joinPath(allocator, &.{ inbox_path, "README.md" });
+    defer allocator.free(inbox_readme_path);
+    try createFileTracked(allocator, inbox_readme_path, INITIAL_INBOX_README, &result);
+
+    // 8. Config file
     var config_dir: []const u8 = undefined;
     var config_dir_allocated = false;
     defer if (config_dir_allocated) allocator.free(config_dir);
@@ -430,9 +458,23 @@ test "INITIAL_DATA_README contains header" {
     try std.testing.expect(std.mem.indexOf(u8, INITIAL_DATA_README, "# data/") != null);
 }
 
-test "INITIAL_ART_README links to media and data" {
-    try std.testing.expect(std.mem.indexOf(u8, INITIAL_ART_README, "[media](../media/README.md)") != null);
-    try std.testing.expect(std.mem.indexOf(u8, INITIAL_ART_README, "[data](../data/README.md)") != null);
+test "INITIAL_INBOX_README contains header" {
+    try std.testing.expect(std.mem.indexOf(u8, INITIAL_INBOX_README, "# inbox/") != null);
+}
+
+test "INITIAL_INBOX_README contains workflow instructions" {
+    try std.testing.expect(std.mem.indexOf(u8, INITIAL_INBOX_README, "ligi index") != null);
+    try std.testing.expect(std.mem.indexOf(u8, INITIAL_INBOX_README, "-t") != null);
+}
+
+test "INITIAL_ART_README lists media, data, and inbox" {
+    try std.testing.expect(std.mem.indexOf(u8, INITIAL_ART_README, "`media/`") != null);
+    try std.testing.expect(std.mem.indexOf(u8, INITIAL_ART_README, "`data/`") != null);
+    try std.testing.expect(std.mem.indexOf(u8, INITIAL_ART_README, "`inbox/`") != null);
+}
+
+test "INITIAL_LIGI_ART_DOC lists inbox" {
+    try std.testing.expect(std.mem.indexOf(u8, INITIAL_LIGI_ART_DOC, "`inbox/`") != null);
 }
 
 test "InitResult init and deinit work correctly" {
