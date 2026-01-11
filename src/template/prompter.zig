@@ -8,7 +8,7 @@ pub fn prompt(
     allocator: std.mem.Allocator,
     fields: []const parser.TemplateField,
     in_reader: *Io.Reader,
-    out_writer: anytype,
+    out_writer: *Io.Writer,
 ) !std.StringHashMap([]const u8) {
     var map = std.StringHashMap([]const u8).init(allocator);
     errdefer {
@@ -26,6 +26,8 @@ pub fn prompt(
             } else {
                 try out_writer.print("> {s}: ", .{field.name});
             }
+            // Flush to ensure prompt is visible before blocking on input
+            try out_writer.flush();
 
             // Read a line from input using Zig 0.15 API
             // takeDelimiter returns null on EOF, or slice up to delimiter (exclusive)
@@ -47,6 +49,7 @@ pub fn prompt(
                         // If type is int, invalid.
                         if (std.mem.eql(u8, field.type_name, "int")) {
                             try out_writer.print("error: expected integer for '{s}'\n", .{field.name});
+                            try out_writer.flush();
                             continue;
                         }
                         try map.put(field.name, try allocator.dupe(u8, ""));
@@ -57,6 +60,7 @@ pub fn prompt(
                     if (std.mem.eql(u8, field.type_name, "int")) {
                         _ = std.fmt.parseInt(i64, trimmed, 10) catch {
                             try out_writer.print("error: expected integer for '{s}'\n", .{field.name});
+                            try out_writer.flush();
                             continue;
                         };
                     }
@@ -100,12 +104,11 @@ test "prompter interaction" {
     // Mock IO using Zig 0.15 Reader.fixed()
     var input_reader = Io.Reader.fixed("Alice\n\n");
 
-    // Output buffer
-    var output_list = try std.ArrayList(u8).initCapacity(allocator, 0);
-    defer output_list.deinit(allocator);
-    const writer = output_list.writer(allocator);
+    // Output buffer - use fixed buffer writer
+    var output_buf: [1024]u8 = undefined;
+    var out_writer: Io.Writer = .fixed(&output_buf);
 
-    var result = try prompt(allocator, fields.items, &input_reader, writer);
+    var result = try prompt(allocator, fields.items, &input_reader, &out_writer);
     defer {
         var it = result.valueIterator();
         while (it.next()) |v| allocator.free(v.*);
@@ -116,7 +119,7 @@ test "prompter interaction" {
     try std.testing.expectEqualStrings("10", result.get("age").?);
 
     // Check prompts match new format
-    const output = output_list.items;
+    const output = out_writer.buffered();
     try std.testing.expect(std.mem.indexOf(u8, output, "> name:") != null);
     try std.testing.expect(std.mem.indexOf(u8, output, "> age (default \"10\"):") != null);
 }
@@ -136,11 +139,11 @@ test "prompter validates int" {
     // Mock IO: "abc" (invalid) then "42" (valid)
     var input_reader = Io.Reader.fixed("abc\n42\n");
 
-    var output_list = try std.ArrayList(u8).initCapacity(allocator, 0);
-    defer output_list.deinit(allocator);
-    const writer = output_list.writer(allocator);
+    // Output buffer - use fixed buffer writer
+    var output_buf: [1024]u8 = undefined;
+    var out_writer: Io.Writer = .fixed(&output_buf);
 
-    var result = try prompt(allocator, fields.items, &input_reader, writer);
+    var result = try prompt(allocator, fields.items, &input_reader, &out_writer);
     defer {
         var it = result.valueIterator();
         while (it.next()) |v| allocator.free(v.*);
@@ -150,6 +153,6 @@ test "prompter validates int" {
     try std.testing.expectEqualStrings("42", result.get("age").?);
 
     // Check that we complained about the int
-    const output = output_list.items;
+    const output = out_writer.buffered();
     try std.testing.expect(std.mem.indexOf(u8, output, "error: expected integer") != null);
 }

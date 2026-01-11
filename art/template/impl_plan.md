@@ -4,11 +4,12 @@ feature_description = { type = "string" }
 cli_surface = { type = "string", default = "" }
 ```
 
-<!--
-AGENT INSTRUCTION:
-Do NOT edit this document directly.
-Create a new document in the local `art/` directory based on this template by copy-pasting the content and filling in the details.
--->
+```@remove
+> **Template Instructions**
+>
+> Do NOT edit this template directly. Fill it using `ligi f art/template/impl_plan.md`
+> or create a new document in `art/` based on this template.
+```
 
 # Document
 

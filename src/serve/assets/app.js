@@ -20,12 +20,22 @@
         langPrefix: 'language-'
     });
 
-    // Custom renderer for mermaid blocks
+    // Custom renderer for mermaid blocks (supports marked v15 token API + legacy args)
     const renderer = new marked.Renderer();
     const originalCode = renderer.code.bind(renderer);
 
     renderer.code = function(code, language, escaped) {
-        if (language === 'mermaid') {
+        if (code && typeof code === 'object') {
+            const token = code;
+            const lang = (token.lang || '').trim().toLowerCase().split(/\s+/)[0];
+            if (lang === 'mermaid') {
+                return '<div class="mermaid">' + escapeHtml(token.text || '') + '</div>';
+            }
+            return originalCode(token);
+        }
+
+        const lang = (language || '').trim().toLowerCase().split(/\s+/)[0];
+        if (lang === 'mermaid') {
             return '<div class="mermaid">' + escapeHtml(code) + '</div>';
         }
         return originalCode(code, language, escaped);

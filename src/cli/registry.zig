@@ -130,16 +130,13 @@ pub const COMMANDS = [_]CommandDef{
         ,
     },
     .{
-        .canonical = "template",
-        .names = &.{ "template", "t" },
+        .canonical = "fill",
+        .names = &.{ "fill", "f" },
         .description = "Fill a template from TOML frontmatter",
         .long_description =
         \\Fill templates with interactive prompts.
         \\
-        \\Subcommands:
-        \\  fill, f    Fill a template interactively
-        \\
-        \\Usage: ligi t f [path] [-c|--clipboard]
+        \\Usage: ligi f [path] [-c|--clipboard]
         \\
         \\If path is omitted, fzf is launched to select a template.
         ,
@@ -256,8 +253,8 @@ const CheckParams = clap.parseParamsComptime(
     \\
 );
 
-/// Template command options
-const TemplateParams = clap.parseParamsComptime(
+/// Fill command options
+const FillParams = clap.parseParamsComptime(
     \\-h, --help         Show this help message
     \\-c, --clipboard    Copy output to clipboard
     \\<str>...
@@ -406,8 +403,8 @@ pub fn run(
         return runCheckCommand(allocator, remaining_args, stdout, stderr);
     } else if (std.mem.eql(u8, cmd.canonical, "backup")) {
         return runBackupCommand(allocator, remaining_args, global_args.quiet != 0, stdout, stderr);
-    } else if (std.mem.eql(u8, cmd.canonical, "template")) {
-        return runTemplateCommand(allocator, remaining_args, stdout, stderr);
+    } else if (std.mem.eql(u8, cmd.canonical, "fill")) {
+        return runFillCommand(allocator, remaining_args, stdout, stderr);
     } else if (std.mem.eql(u8, cmd.canonical, "v")) {
         return runVoiceCommand(allocator, remaining_args, stdout, stderr);
     } else if (std.mem.eql(u8, cmd.canonical, "serve")) {
@@ -520,40 +517,48 @@ fn runCheckCommand(
     );
 }
 
-/// Run the template command with subcommand parsing
-fn runTemplateCommand(
+/// Run the fill command
+fn runFillCommand(
     allocator: std.mem.Allocator,
     args: []const []const u8,
     stdout: anytype,
     stderr: anytype,
 ) !u8 {
-    // Check for subcommand
-    if (args.len == 0) {
-        try stderr.writeAll("error: missing subcommand\n");
-        try stderr.writeAll("usage: ligi t <fill|f> [path] [-c|--clipboard]\n");
+    var diag: clap.Diagnostic = .{};
+    var iter = clap.args.SliceIterator{ .args = args };
+
+    var res = clap.parseEx(clap.Help, &FillParams, clap.parsers.default, &iter, .{
+        .diagnostic = &diag,
+        .allocator = allocator,
+    }) catch |err| {
+        try diag.report(stderr, err);
         return 1;
-    }
+    };
+    defer res.deinit();
 
-    const subcmd = args[0];
-    const subcmd_args = args[1..];
-
-    // Handle fill subcommand
-    if (std.mem.eql(u8, subcmd, "fill") or std.mem.eql(u8, subcmd, "f")) {
-        return runTemplateFillCommand(allocator, subcmd_args, stdout, stderr);
-    }
-
-    // Handle --help at template level
-    if (std.mem.eql(u8, subcmd, "--help") or std.mem.eql(u8, subcmd, "-h")) {
-        const registry = buildRegistry();
-        if (registry.findCommand("template")) |cmd| {
-            try registry.printCommandHelp(cmd, stdout);
-        }
+    // Handle --help for fill
+    if (res.args.help != 0) {
+        try stdout.writeAll("Usage: ligi f [path] [-c|--clipboard]\n\n");
+        try stdout.writeAll("Fill a template interactively.\n\n");
+        try stdout.writeAll("Arguments:\n");
+        try stdout.writeAll("  [path]         Path to template file (launches fzf if omitted)\n\n");
+        try stdout.writeAll("Options:\n");
+        try stdout.writeAll("  -c, --clipboard  Copy output to clipboard\n");
+        try stdout.writeAll("  -h, --help       Show this help\n");
         return 0;
     }
 
-    try stderr.print("error: unknown subcommand '{s}'\n", .{subcmd});
-    try stderr.writeAll("usage: ligi t <fill|f> [path] [-c|--clipboard]\n");
-    return 1;
+    const template_cmd = @import("commands/template.zig");
+    const positionals = res.positionals[0];
+    const path: ?[]const u8 = if (positionals.len > 0) positionals[0] else null;
+
+    return template_cmd.runFill(
+        allocator,
+        path,
+        res.args.clipboard != 0,
+        stdout,
+        stderr,
+    );
 }
 
 /// Run the voice command with clap parsing
@@ -703,50 +708,6 @@ fn runQueryCommand(
     // since it has subcommands (t/tag) and complex argument structure
     const query_cmd = @import("commands/query.zig");
     return query_cmd.run(allocator, args, stdout, stderr, global_quiet);
-}
-
-/// Run the template fill subcommand
-fn runTemplateFillCommand(
-    allocator: std.mem.Allocator,
-    args: []const []const u8,
-    stdout: anytype,
-    stderr: anytype,
-) !u8 {
-    var diag: clap.Diagnostic = .{};
-    var iter = clap.args.SliceIterator{ .args = args };
-
-    var res = clap.parseEx(clap.Help, &TemplateParams, clap.parsers.default, &iter, .{
-        .diagnostic = &diag,
-        .allocator = allocator,
-    }) catch |err| {
-        try diag.report(stderr, err);
-        return 1;
-    };
-    defer res.deinit();
-
-    // Handle --help for fill
-    if (res.args.help != 0) {
-        try stdout.writeAll("Usage: ligi t f [path] [-c|--clipboard]\n\n");
-        try stdout.writeAll("Fill a template interactively.\n\n");
-        try stdout.writeAll("Arguments:\n");
-        try stdout.writeAll("  [path]         Path to template file (launches fzf if omitted)\n\n");
-        try stdout.writeAll("Options:\n");
-        try stdout.writeAll("  -c, --clipboard  Copy output to clipboard\n");
-        try stdout.writeAll("  -h, --help       Show this help\n");
-        return 0;
-    }
-
-    const template_cmd = @import("commands/template.zig");
-    const positionals = res.positionals[0];
-    const path: ?[]const u8 = if (positionals.len > 0) positionals[0] else null;
-
-    return template_cmd.runFill(
-        allocator,
-        path,
-        res.args.clipboard != 0,
-        stdout,
-        stderr,
-    );
 }
 
 /// Run the serve command with clap parsing
@@ -937,9 +898,9 @@ test "CheckParams are valid" {
     _ = CheckParams;
 }
 
-test "TemplateParams are valid" {
-    // Verify template params compile correctly
-    _ = TemplateParams;
+test "FillParams are valid" {
+    // Verify fill params compile correctly
+    _ = FillParams;
 }
 
 test "BackupParams are valid" {
