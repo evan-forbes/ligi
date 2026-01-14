@@ -413,6 +413,13 @@
         }
     }
 
+    function findCalendarPath() {
+        if (fileList.length === 0) return null;
+        if (fileList.includes('calendar.md')) return 'calendar.md';
+        const inSubdir = fileList.find(path => path.endsWith('/calendar.md'));
+        return inSubdir || null;
+    }
+
     // Initialize
     async function init() {
         await loadFileList();
@@ -421,8 +428,12 @@
         if (window.location.hash) {
             handleHashChange();
         } else if (fileList.length > 0) {
-            // Auto-load first file if no hash
-            // loadFile(fileList[0]);
+            const calendarPath = findCalendarPath();
+            if (calendarPath) {
+                loadFile(calendarPath);
+            } else {
+                loadFile(fileList[0]);
+            }
         }
     }
 

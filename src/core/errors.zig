@@ -8,6 +8,7 @@ pub const ErrorCategory = enum(u8) {
     usage = 1, // Bad arguments
     filesystem = 2, // File/dir operations failed
     config = 3, // Config parse/write failed
+    network = 4, // Network/API operations failed
     internal = 127, // Bug in ligi
 };
 
@@ -57,6 +58,13 @@ pub const LigiError = struct {
         return .{
             .category = .usage,
             .context = .{ .message = message },
+        };
+    }
+
+    pub fn network(message: []const u8, cause: ?*const ErrorContext) Self {
+        return .{
+            .category = .network,
+            .context = .{ .message = message, .source = cause },
         };
     }
 

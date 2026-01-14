@@ -213,7 +213,7 @@ pub const COMMANDS = [_]CommandDef{
     },
     .{
         .canonical = "globalize",
-        .names = &.{ "globalize", "glob", "g" },
+        .names = &.{"globalize"},
         .description = "Copy local assets to global ~/.ligi directory",
         .long_description =
         \\Copy local ligi assets to the global ~/.ligi directory.
@@ -232,6 +232,39 @@ pub const COMMANDS = [_]CommandDef{
         \\  ligi globalize art/template/my_template.md
         \\  ligi glob data/reference.csv media/diagram.png
         \\  ligi g art/template/*.md --force
+        ,
+    },
+    .{
+        .canonical = "github",
+        .names = &.{ "github", "gh" },
+        .description = "Pull GitHub issues and PRs as local documents",
+        .long_description =
+        \\Pull GitHub issues and PRs as local markdown documents.
+        \\
+        \\Subcommands:
+        \\  pull, p      Pull all issues and PRs from a repository
+        \\  refresh, r   Refresh specific issue/PR numbers
+        \\
+        \\Usage:
+        \\  ligi github pull [-r owner/repo] [--state open|closed|all] [--since DATE]
+        \\  ligi github refresh <range> [-r owner/repo]
+        \\
+        \\Options:
+        \\  -r, --repo <owner/repo>   Repository to pull from (default: infer from git remote)
+        \\  -q, --quiet               Suppress non-error output
+        \\  --state <state>           Filter by state: open, closed, all (default: all)
+        \\  --since <date>            Only issues updated since date (ISO 8601)
+        \\
+        \\Range format for refresh:
+        \\  42           Single issue/PR
+        \\  1-10         Range of issues
+        \\  1,5,10-20    Mixed format
+        \\
+        \\Examples:
+        \\  ligi github pull -r evan-forbes/ligi
+        \\  ligi gh p                              # Infer repo from git
+        \\  ligi github refresh 42,45
+        \\  ligi gh r 1-10 -r owner/repo
         ,
     },
 };
@@ -354,6 +387,17 @@ const GlobalizeParams = clap.parseParamsComptime(
     \\
 );
 
+/// GitHub command options
+const GithubParams = clap.parseParamsComptime(
+    \\-h, --help             Show this help message
+    \\-r, --repo <str>       Repository (owner/repo or URL)
+    \\-q, --quiet            Suppress non-error output
+    \\--state <str>          Filter by state: open, closed, all
+    \\--since <str>          Only issues updated since date (ISO 8601)
+    \\<str>...
+    \\
+);
+
 /// Run the CLI with the given arguments
 pub fn run(
     allocator: std.mem.Allocator,
@@ -444,6 +488,8 @@ pub fn run(
         return runLspCommand(allocator, remaining_args, stdout, stderr);
     } else if (std.mem.eql(u8, cmd.canonical, "globalize")) {
         return runGlobalizeCommand(allocator, remaining_args, stdout, stderr);
+    } else if (std.mem.eql(u8, cmd.canonical, "github")) {
+        return runGithubCommand(allocator, remaining_args, global_args.quiet != 0, stdout, stderr);
     }
 
     try stderr.print("error: command '{s}' has no handler\n", .{cmd.canonical});
@@ -920,6 +966,62 @@ fn runGlobalizeCommand(
     );
 }
 
+/// Run the github command with clap parsing
+fn runGithubCommand(
+    allocator: std.mem.Allocator,
+    args: []const []const u8,
+    global_quiet: bool,
+    stdout: anytype,
+    stderr: anytype,
+) !u8 {
+    var diag: clap.Diagnostic = .{};
+    var iter = clap.args.SliceIterator{ .args = args };
+
+    var res = clap.parseEx(clap.Help, &GithubParams, clap.parsers.default, &iter, .{
+        .diagnostic = &diag,
+        .allocator = allocator,
+    }) catch |err| {
+        try diag.report(stderr, err);
+        return 1;
+    };
+    defer res.deinit();
+
+    // Handle --help for github
+    if (res.args.help != 0) {
+        const registry = buildRegistry();
+        if (registry.findCommand("github")) |cmd| {
+            try registry.printCommandHelp(cmd, stdout);
+        }
+        return 0;
+    }
+
+    const positionals = res.positionals[0];
+    if (positionals.len == 0) {
+        try stderr.writeAll("error: github requires a subcommand (pull|p, refresh|r)\n");
+        return 1;
+    }
+
+    const github_cmd = @import("commands/github.zig");
+    const subcommand = github_cmd.parseSubcommand(positionals[0]) orelse {
+        try stderr.print("error: github: unknown subcommand '{s}'\n", .{positionals[0]});
+        return 1;
+    };
+
+    // For refresh, extract range from positionals[1]
+    const range: ?[]const u8 = if (subcommand == .refresh and positionals.len > 1) positionals[1] else null;
+
+    const quiet = (res.args.quiet != 0) or global_quiet;
+
+    return github_cmd.run(allocator, .{
+        .subcommand = subcommand,
+        .repo_arg = res.args.repo,
+        .quiet = quiet,
+        .state = res.args.state,
+        .since = res.args.since,
+        .range = range,
+    }, stdout, stderr);
+}
+
 // ============================================================================
 // Tests
 // ============================================================================
@@ -962,6 +1064,7 @@ test "printHelp includes all commands" {
     try std.testing.expect(std.mem.indexOf(u8, output, "serve") != null);
     try std.testing.expect(std.mem.indexOf(u8, output, "lsp") != null);
     try std.testing.expect(std.mem.indexOf(u8, output, "globalize") != null);
+    try std.testing.expect(std.mem.indexOf(u8, output, "github") != null);
 }
 
 test "printHelp shows aliases" {
@@ -1030,16 +1133,26 @@ test "GlobalizeParams are valid" {
     _ = GlobalizeParams;
 }
 
-test "findCommand returns globalize for all aliases" {
+test "GithubParams are valid" {
+    // Verify github params compile correctly
+    _ = GithubParams;
+}
+
+test "findCommand returns globalize" {
     const registry = buildRegistry();
-    const cmd_canonical = registry.findCommand("globalize");
-    const cmd_glob = registry.findCommand("glob");
-    const cmd_g = registry.findCommand("g");
+    const cmd = registry.findCommand("globalize");
+
+    try std.testing.expect(cmd != null);
+    try std.testing.expectEqualStrings("globalize", cmd.?.canonical);
+}
+
+test "findCommand returns github for all aliases" {
+    const registry = buildRegistry();
+    const cmd_canonical = registry.findCommand("github");
+    const cmd_gh = registry.findCommand("gh");
 
     try std.testing.expect(cmd_canonical != null);
-    try std.testing.expect(cmd_glob != null);
-    try std.testing.expect(cmd_g != null);
-    try std.testing.expectEqualStrings("globalize", cmd_canonical.?.canonical);
-    try std.testing.expectEqualStrings("globalize", cmd_glob.?.canonical);
-    try std.testing.expectEqualStrings("globalize", cmd_g.?.canonical);
+    try std.testing.expect(cmd_gh != null);
+    try std.testing.expectEqualStrings("github", cmd_canonical.?.canonical);
+    try std.testing.expectEqualStrings("github", cmd_gh.?.canonical);
 }
