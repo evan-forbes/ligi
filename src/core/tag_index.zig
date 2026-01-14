@@ -598,9 +598,35 @@ fn parseTagListFromIndex(allocator: std.mem.Allocator, content: []const u8) ![][
     return tags.toOwnedSlice(allocator);
 }
 
-fn freeTagList(allocator: std.mem.Allocator, tags: [][]const u8) void {
+pub fn freeTagList(allocator: std.mem.Allocator, tags: [][]const u8) void {
     for (tags) |t| allocator.free(t);
     allocator.free(tags);
+}
+
+/// Load tag names from the local tag index (art/index/ligi_tags.md).
+/// Returns an allocated slice (possibly empty).
+pub fn loadTagListFromIndex(
+    allocator: std.mem.Allocator,
+    art_path: []const u8,
+    stderr: anytype,
+) ![][]const u8 {
+    const tag_index_path = try std.fs.path.join(allocator, &.{ art_path, "index", "ligi_tags.md" });
+    defer allocator.free(tag_index_path);
+
+    if (!fs.fileExists(tag_index_path)) {
+        return try allocator.alloc([]const u8, 0);
+    }
+
+    const content = switch (fs.readFile(allocator, tag_index_path)) {
+        .ok => |c| c,
+        .err => {
+            try stderr.print("warning: cannot read tag index: {s}\n", .{tag_index_path});
+            return try allocator.alloc([]const u8, 0);
+        },
+    };
+    defer allocator.free(content);
+
+    return parseTagListFromIndex(allocator, content);
 }
 
 /// Load an existing tag map from local index files

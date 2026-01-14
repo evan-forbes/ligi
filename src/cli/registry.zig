@@ -153,6 +153,10 @@ pub const COMMANDS = [_]CommandDef{
         \\  ligi p week [-d YYYY-MM-DD]
         \\  ligi p month [-d YYYY-MM-DD]
         \\  ligi p quarter [-d YYYY-MM-DD]
+        \\  ligi p feature <name> [-l long|short] [-d YYYY-MM-DD] [--inbox|--no-inbox]
+        \\  ligi p chore <name> [-l long|short] [-d YYYY-MM-DD] [--inbox|--no-inbox]
+        \\  ligi p refactor <name> [-l long|short] [-d YYYY-MM-DD] [--inbox|--no-inbox]
+        \\  ligi p perf <name> [-l long|short] [-d YYYY-MM-DD] [--inbox|--no-inbox]
         ,
     },
     .{
@@ -623,7 +627,7 @@ fn runPlanCommand(
 
     const positionals = res.positionals[0];
     if (positionals.len == 0) {
-        try stderr.writeAll("error: plan requires a subcommand (day|week|month|quarter)\n");
+        try stderr.writeAll("error: plan requires a subcommand (day|week|month|quarter|feature|chore|refactor|perf)\n");
         return 1;
     }
 

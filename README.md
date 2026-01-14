@@ -131,6 +131,32 @@ Author: {{ author }}
 Items completed: {{ count }}
 ```
 
+### `ligi plan` / `ligi p`
+
+Create planning docs from templates and update `art/calendar.md` (time-tag index).
+
+```bash
+ligi p day                  # daily plan for today (UTC)
+ligi p day -l short          # short daily plan
+ligi p week -d 2026-01-14   # weekly plan for a specific date
+ligi p month -d 2026-01-01  # monthly plan for a specific date
+ligi p quarter -d 2026-01-01
+
+ligi p feature login-flow           # item plan (defaults to inbox)
+ligi p feature login-flow -l short  # short item plan
+ligi p chore cleanup-cache --no-inbox
+```
+
+Time tags are inserted automatically:
+- day: `[[t/t/d/yy-mm-dd]]`
+- week: `[[t/t/w/yy-mm-w]]` (week-of-month)
+- month: `[[t/t/m/yy-mm]]`
+- quarter: `[[t/t/q/yy-q]]`
+
+Docs are created under `art/plan/{day,week,month,quarter}/` with templates in `art/template/plan_*.md`.
+Item plans live under `art/inbox/{feature,chore,refactor,perf}/` by default (use `--no-inbox` to write into `art/plan/`).
+Details: `art/time_and_item_based_planning.md`.
+
 ### `ligi serve` / `ligi s`
 
 Local HTTP server for rendered markdown. Supports GFM and Mermaid diagrams. Use the open option to launch a browser, or set a custom port and root directory.

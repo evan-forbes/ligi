@@ -100,19 +100,33 @@ pub fn run(
 
     const use_inbox = options.inbox orelse defaultInbox(options.kind);
 
-    switch (options.kind) {
-        .day, .week, .month, .quarter => {},
-        .feature, .chore, .refactor, .perf => {
-            try stderr.writeAll("error: plan: feature/chore/refactor/perf templates not implemented yet\n");
+    if (requiresName(options.kind) and options.name == null) {
+        try stderr.print("error: plan: {s} requires a file name\n", .{planKindLabel(options.kind)});
+        return 1;
+    }
+    if (requiresName(options.kind)) {
+        const raw_name = options.name orelse "";
+        const trimmed = std.mem.trim(u8, raw_name, " \t\r\n");
+        if (trimmed.len == 0) {
+            try stderr.print("error: plan: {s} requires a non-empty file name\n", .{planKindLabel(options.kind)});
             return 1;
-        },
+        }
     }
 
-    const target = try resolveTarget(arena_alloc, options.kind, use_inbox, &time_tags);
+    const target = try resolveTarget(
+        arena_alloc,
+        options.kind,
+        options.length,
+        options.name,
+        use_inbox,
+        &time_tags,
+    );
 
     const created = try ensurePlanDoc(
         arena_alloc,
         target,
+        options.kind,
+        options.name,
         &time_tags,
         options.quiet,
         stdout,
@@ -143,6 +157,26 @@ fn defaultInbox(kind: PlanKind) bool {
     };
 }
 
+fn requiresName(kind: PlanKind) bool {
+    return switch (kind) {
+        .feature, .chore, .refactor, .perf => true,
+        else => false,
+    };
+}
+
+fn planKindLabel(kind: PlanKind) []const u8 {
+    return switch (kind) {
+        .day => "day",
+        .week => "week",
+        .month => "month",
+        .quarter => "quarter",
+        .feature => "feature",
+        .chore => "chore",
+        .refactor => "refactor",
+        .perf => "perf",
+    };
+}
+
 const PlanTarget = struct {
     template_rel: []const u8,
     output_rel: []const u8,
@@ -152,16 +186,12 @@ const PlanTarget = struct {
 fn resolveTarget(
     allocator: std.mem.Allocator,
     kind: PlanKind,
+    length: PlanLength,
+    name: ?[]const u8,
     use_inbox: bool,
     tags: *const TimeTags,
 ) !PlanTarget {
-    const template_rel = switch (kind) {
-        .day => "art/template/plan_day.md",
-        .week => "art/template/plan_week.md",
-        .month => "art/template/plan_month.md",
-        .quarter => "art/template/plan_quarter.md",
-        else => return error.UnsupportedKind,
-    };
+    const template_rel = try templatePathForKind(kind, length);
 
     const base_dir = if (use_inbox) "art/inbox" else "art/plan";
     const kind_dir = switch (kind) {
@@ -169,7 +199,10 @@ fn resolveTarget(
         .week => "week",
         .month => "month",
         .quarter => "quarter",
-        else => "",
+        .feature => "feature",
+        .chore => "chore",
+        .refactor => "refactor",
+        .perf => "perf",
     };
 
     const filename = switch (kind) {
@@ -177,11 +210,17 @@ fn resolveTarget(
         .week => tags.week_value,
         .month => tags.month_value,
         .quarter => tags.quarter_value,
-        else => tags.date_short,
+        .feature, .chore, .refactor, .perf => blk: {
+            const raw_name = name orelse return error.MissingName;
+            break :blk try normalizeItemName(allocator, raw_name);
+        },
     };
 
     const output_rel = try std.fs.path.join(allocator, &.{ base_dir, kind_dir, filename });
-    const output_rel_md = try std.fmt.allocPrint(allocator, "{s}.md", .{output_rel});
+    const output_rel_md = if (hasMarkdownExtension(output_rel))
+        output_rel
+    else
+        try std.fmt.allocPrint(allocator, "{s}.md", .{output_rel});
 
     const file_in_art = stripArtPrefix(output_rel_md);
 
@@ -195,6 +234,8 @@ fn resolveTarget(
 fn ensurePlanDoc(
     allocator: std.mem.Allocator,
     target: PlanTarget,
+    kind: PlanKind,
+    name: ?[]const u8,
     tags: *const TimeTags,
     quiet: bool,
     stdout: anytype,
@@ -213,7 +254,7 @@ fn ensurePlanDoc(
         },
     }
 
-    const rendered = try renderTemplate(allocator, target.template_rel, tags, stderr);
+    const rendered = try renderTemplate(allocator, target.template_rel, kind, name, tags, stderr);
 
     const filled = try tag_index.fillTagLinks(allocator, rendered, target.file_in_art);
 
@@ -235,6 +276,8 @@ fn ensurePlanDoc(
 fn renderTemplate(
     allocator: std.mem.Allocator,
     template_path: []const u8,
+    kind: PlanKind,
+    name: ?[]const u8,
     tags: *const TimeTags,
     stderr: anytype,
 ) ![]const u8 {
@@ -263,7 +306,7 @@ fn renderTemplate(
     };
     defer tmpl.deinit();
 
-    var values = try buildTemplateValues(allocator, tags);
+    var values = try buildTemplateValues(allocator, kind, name, tags);
     defer values.deinit();
 
     // Prompt for any missing fields in the template.
@@ -311,7 +354,12 @@ fn renderTemplate(
     return try allocator.dupe(u8, output_list.items);
 }
 
-fn buildTemplateValues(allocator: std.mem.Allocator, tags: *const TimeTags) !std.StringHashMap([]const u8) {
+fn buildTemplateValues(
+    allocator: std.mem.Allocator,
+    kind: PlanKind,
+    name: ?[]const u8,
+    tags: *const TimeTags,
+) !std.StringHashMap([]const u8) {
     var values = std.StringHashMap([]const u8).init(allocator);
     try values.put("date", tags.date_short);
     try values.put("date_long", tags.date_long);
@@ -326,6 +374,18 @@ fn buildTemplateValues(allocator: std.mem.Allocator, tags: *const TimeTags) !std
     try values.put("prev_week_tag", tags.prev_week_tag);
     try values.put("prev_month_tag", tags.prev_month_tag);
     try values.put("prev_quarter_tag", tags.prev_quarter_tag);
+    if (name) |item_name| {
+        const trimmed = std.mem.trim(u8, item_name, " \t\r\n");
+        if (trimmed.len > 0) {
+            var display = trimmed;
+            if (display.len > 3 and std.ascii.eqlIgnoreCase(display[display.len - 3 ..], ".md")) {
+                display = display[0 .. display.len - 3];
+            }
+            const duped = try allocator.dupe(u8, display);
+            try values.put("item", duped);
+        }
+    }
+    try values.put("kind", planKindLabel(kind));
     return values;
 }
 
@@ -360,7 +420,12 @@ fn calendarTagsForKind(
         .quarter => {
             try list.append(allocator, tags.quarter_tag);
         },
-        else => {},
+        .feature, .chore, .refactor, .perf => {
+            try list.append(allocator, tags.day_tag);
+            try list.append(allocator, tags.week_tag);
+            try list.append(allocator, tags.month_tag);
+            try list.append(allocator, tags.quarter_tag);
+        },
     }
     return try list.toOwnedSlice(allocator);
 }
@@ -451,6 +516,12 @@ fn updateCalendar(
         }
     }
 
+    const index_tags = try tag_index.loadTagListFromIndex(allocator, art_path, stderr);
+    defer tag_index.freeTagList(allocator, index_tags);
+    for (index_tags) |tag_name| {
+        try addTimeTag(&day_bucket, &week_bucket, &month_bucket, &quarter_bucket, tag_name);
+    }
+
     for (tags_to_add) |tag_name| {
         try addTimeTag(&day_bucket, &week_bucket, &month_bucket, &quarter_bucket, tag_name);
     }
@@ -502,6 +573,53 @@ fn renderCalendarSection(
         try writer.print("- [[t/{s}]]\n", .{entry.tag});
     }
     try writer.writeByte('\n');
+}
+
+fn templatePathForKind(kind: PlanKind, length: PlanLength) ![]const u8 {
+    return switch (kind) {
+        .day => switch (length) {
+            .long => "art/template/plan_day.md",
+            .short => "art/template/plan_day_short.md",
+        },
+        .week => switch (length) {
+            .long => "art/template/plan_week.md",
+            .short => "art/template/plan_week_short.md",
+        },
+        .month => switch (length) {
+            .long => "art/template/plan_month.md",
+            .short => "art/template/plan_month_short.md",
+        },
+        .quarter => switch (length) {
+            .long => "art/template/plan_quarter.md",
+            .short => "art/template/plan_quarter_short.md",
+        },
+        .feature => switch (length) {
+            .long => "art/template/plan_feature.md",
+            .short => "art/template/plan_feature_short.md",
+        },
+        .chore => switch (length) {
+            .long => "art/template/plan_chore.md",
+            .short => "art/template/plan_chore_short.md",
+        },
+        .refactor => switch (length) {
+            .long => "art/template/plan_refactor.md",
+            .short => "art/template/plan_refactor_short.md",
+        },
+        .perf => switch (length) {
+            .long => "art/template/plan_perf.md",
+            .short => "art/template/plan_perf_short.md",
+        },
+    };
+}
+
+fn normalizeItemName(allocator: std.mem.Allocator, name: []const u8) ![]const u8 {
+    const trimmed = std.mem.trim(u8, name, " \t\r\n");
+    return try allocator.dupe(u8, trimmed);
+}
+
+fn hasMarkdownExtension(path: []const u8) bool {
+    if (path.len < 3) return false;
+    return std.ascii.eqlIgnoreCase(path[path.len - 3 ..], ".md");
 }
 
 fn addTimeTag(

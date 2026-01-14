@@ -733,7 +733,7 @@ pub const INITIAL_PLAN_DAY_TEMPLATE =
     \\> Do NOT edit this template directly. Create a new doc with `ligi p day`.
     \\```
     \\
-    \\# Daily Plan — {{ date_long }}
+    \\# Daily Plan - {{ date_long }}
     \\
     \\[[t/planning]] [[t/{{ day_tag }}]] [[t/{{ week_tag }}]] [[t/{{ month_tag }}]] [[t/{{ quarter_tag }}]]
     \\
@@ -769,7 +769,7 @@ pub const INITIAL_PLAN_WEEK_TEMPLATE =
     \\> Do NOT edit this template directly. Create a new doc with `ligi p week`.
     \\```
     \\
-    \\# Weekly Plan — {{ week }}
+    \\# Weekly Plan - {{ week }}
     \\
     \\[[t/planning]] [[t/{{ week_tag }}]] [[t/{{ month_tag }}]] [[t/{{ quarter_tag }}]]
     \\
@@ -804,7 +804,7 @@ pub const INITIAL_PLAN_MONTH_TEMPLATE =
     \\> Do NOT edit this template directly. Create a new doc with `ligi p month`.
     \\```
     \\
-    \\# Monthly Plan — {{ month }}
+    \\# Monthly Plan - {{ month }}
     \\
     \\[[t/planning]] [[t/{{ month_tag }}]] [[t/{{ quarter_tag }}]]
     \\
@@ -837,7 +837,7 @@ pub const INITIAL_PLAN_QUARTER_TEMPLATE =
     \\> Do NOT edit this template directly. Create a new doc with `ligi p quarter`.
     \\```
     \\
-    \\# Quarterly Plan — {{ quarter }}
+    \\# Quarterly Plan - {{ quarter }}
     \\
     \\[[t/planning]] [[t/{{ quarter_tag }}]]
     \\
@@ -852,6 +852,435 @@ pub const INITIAL_PLAN_QUARTER_TEMPLATE =
     \\-
     \\
     \\## Risks / Dependencies
+    \\-
+    \\
+;
+
+/// Initial content for art/template/plan_day_short.md
+pub const INITIAL_PLAN_DAY_SHORT_TEMPLATE =
+    \\```toml
+    \\date_long = { type = "string" }
+    \\day_tag = { type = "string" }
+    \\week_tag = { type = "string" }
+    \\month_tag = { type = "string" }
+    \\quarter_tag = { type = "string" }
+    \\prev_day_tag = { type = "string" }
+    \\```
+    \\
+    \\```@remove
+    \\> **Template Instructions**
+    \\>
+    \\> Do NOT edit this template directly. Create a new doc with `ligi p day -l short`.
+    \\```
+    \\
+    \\# Daily Plan - {{ date_long }}
+    \\
+    \\[[t/planning]] [[t/{{ day_tag }}]] [[t/{{ week_tag }}]] [[t/{{ month_tag }}]] [[t/{{ quarter_tag }}]]
+    \\
+    \\## Review
+    \\- Yesterday: [[t/{{ prev_day_tag }}]]
+    \\- Week: [[t/{{ week_tag }}]]
+    \\
+    \\## Focus
+    \\-
+    \\
+    \\## Notes
+    \\-
+    \\
+;
+
+/// Initial content for art/template/plan_week_short.md
+pub const INITIAL_PLAN_WEEK_SHORT_TEMPLATE =
+    \\```toml
+    \\week = { type = "string" }
+    \\week_tag = { type = "string" }
+    \\month_tag = { type = "string" }
+    \\quarter_tag = { type = "string" }
+    \\prev_week_tag = { type = "string" }
+    \\```
+    \\
+    \\```@remove
+    \\> **Template Instructions**
+    \\>
+    \\> Do NOT edit this template directly. Create a new doc with `ligi p week -l short`.
+    \\```
+    \\
+    \\# Weekly Plan - {{ week }}
+    \\
+    \\[[t/planning]] [[t/{{ week_tag }}]] [[t/{{ month_tag }}]] [[t/{{ quarter_tag }}]]
+    \\
+    \\## Review
+    \\- Last week: [[t/{{ prev_week_tag }}]]
+    \\
+    \\## Goals
+    \\-
+    \\
+    \\## Notes
+    \\-
+    \\
+;
+
+/// Initial content for art/template/plan_month_short.md
+pub const INITIAL_PLAN_MONTH_SHORT_TEMPLATE =
+    \\```toml
+    \\month = { type = "string" }
+    \\month_tag = { type = "string" }
+    \\quarter_tag = { type = "string" }
+    \\prev_month_tag = { type = "string" }
+    \\```
+    \\
+    \\```@remove
+    \\> **Template Instructions**
+    \\>
+    \\> Do NOT edit this template directly. Create a new doc with `ligi p month -l short`.
+    \\```
+    \\
+    \\# Monthly Plan - {{ month }}
+    \\
+    \\[[t/planning]] [[t/{{ month_tag }}]] [[t/{{ quarter_tag }}]]
+    \\
+    \\## Review
+    \\- Last month: [[t/{{ prev_month_tag }}]]
+    \\
+    \\## Goals
+    \\-
+    \\
+    \\## Notes
+    \\-
+    \\
+;
+
+/// Initial content for art/template/plan_quarter_short.md
+pub const INITIAL_PLAN_QUARTER_SHORT_TEMPLATE =
+    \\```toml
+    \\quarter = { type = "string" }
+    \\quarter_tag = { type = "string" }
+    \\prev_quarter_tag = { type = "string" }
+    \\```
+    \\
+    \\```@remove
+    \\> **Template Instructions**
+    \\>
+    \\> Do NOT edit this template directly. Create a new doc with `ligi p quarter -l short`.
+    \\```
+    \\
+    \\# Quarterly Plan - {{ quarter }}
+    \\
+    \\[[t/planning]] [[t/{{ quarter_tag }}]]
+    \\
+    \\## Review
+    \\- Last quarter: [[t/{{ prev_quarter_tag }}]]
+    \\
+    \\## Themes
+    \\-
+    \\
+    \\## Notes
+    \\-
+    \\
+;
+
+/// Initial content for art/template/plan_feature.md
+pub const INITIAL_PLAN_FEATURE_TEMPLATE =
+    \\```toml
+    \\item = { type = "string" }
+    \\date_long = { type = "string" }
+    \\day_tag = { type = "string" }
+    \\week_tag = { type = "string" }
+    \\month_tag = { type = "string" }
+    \\quarter_tag = { type = "string" }
+    \\```
+    \\
+    \\```@remove
+    \\> **Template Instructions**
+    \\>
+    \\> Do NOT edit this template directly. Create a new doc with `ligi p feature <name>`.
+    \\```
+    \\
+    \\# Feature Plan - {{ item }}
+    \\
+    \\Date: {{ date_long }}
+    \\
+    \\[[t/planning]] [[t/feature]] [[t/{{ day_tag }}]] [[t/{{ week_tag }}]] [[t/{{ month_tag }}]] [[t/{{ quarter_tag }}]]
+    \\
+    \\## Summary
+    \\-
+    \\
+    \\## Problem / Opportunity
+    \\-
+    \\
+    \\## Desired Outcome
+    \\-
+    \\
+    \\## Scope
+    \\- In:
+    \\- Out:
+    \\
+    \\## Plan
+    \\-
+    \\
+    \\## Risks / Dependencies
+    \\-
+    \\
+    \\## Definition of Done
+    \\-
+    \\
+    \\## Notes
+    \\-
+    \\
+;
+
+/// Initial content for art/template/plan_feature_short.md
+pub const INITIAL_PLAN_FEATURE_SHORT_TEMPLATE =
+    \\```toml
+    \\item = { type = "string" }
+    \\date_long = { type = "string" }
+    \\day_tag = { type = "string" }
+    \\week_tag = { type = "string" }
+    \\month_tag = { type = "string" }
+    \\quarter_tag = { type = "string" }
+    \\```
+    \\
+    \\```@remove
+    \\> **Template Instructions**
+    \\>
+    \\> Do NOT edit this template directly. Create a new doc with `ligi p feature <name> -l short`.
+    \\```
+    \\
+    \\# Feature Plan - {{ item }}
+    \\
+    \\Date: {{ date_long }}
+    \\
+    \\[[t/planning]] [[t/feature]] [[t/{{ day_tag }}]] [[t/{{ week_tag }}]] [[t/{{ month_tag }}]] [[t/{{ quarter_tag }}]]
+    \\
+    \\## Goal
+    \\-
+    \\
+    \\## Approach
+    \\-
+    \\
+    \\## Done When
+    \\-
+    \\
+;
+
+/// Initial content for art/template/plan_chore.md
+pub const INITIAL_PLAN_CHORE_TEMPLATE =
+    \\```toml
+    \\item = { type = "string" }
+    \\date_long = { type = "string" }
+    \\day_tag = { type = "string" }
+    \\week_tag = { type = "string" }
+    \\month_tag = { type = "string" }
+    \\quarter_tag = { type = "string" }
+    \\```
+    \\
+    \\```@remove
+    \\> **Template Instructions**
+    \\>
+    \\> Do NOT edit this template directly. Create a new doc with `ligi p chore <name>`.
+    \\```
+    \\
+    \\# Chore Plan - {{ item }}
+    \\
+    \\Date: {{ date_long }}
+    \\
+    \\[[t/planning]] [[t/chore]] [[t/{{ day_tag }}]] [[t/{{ week_tag }}]] [[t/{{ month_tag }}]] [[t/{{ quarter_tag }}]]
+    \\
+    \\## Purpose
+    \\-
+    \\
+    \\## Steps
+    \\-
+    \\
+    \\## Checks
+    \\-
+    \\
+    \\## Risks / Dependencies
+    \\-
+    \\
+    \\## Notes
+    \\-
+    \\
+;
+
+/// Initial content for art/template/plan_chore_short.md
+pub const INITIAL_PLAN_CHORE_SHORT_TEMPLATE =
+    \\```toml
+    \\item = { type = "string" }
+    \\date_long = { type = "string" }
+    \\day_tag = { type = "string" }
+    \\week_tag = { type = "string" }
+    \\month_tag = { type = "string" }
+    \\quarter_tag = { type = "string" }
+    \\```
+    \\
+    \\```@remove
+    \\> **Template Instructions**
+    \\>
+    \\> Do NOT edit this template directly. Create a new doc with `ligi p chore <name> -l short`.
+    \\```
+    \\
+    \\# Chore Plan - {{ item }}
+    \\
+    \\Date: {{ date_long }}
+    \\
+    \\[[t/planning]] [[t/chore]] [[t/{{ day_tag }}]] [[t/{{ week_tag }}]] [[t/{{ month_tag }}]] [[t/{{ quarter_tag }}]]
+    \\
+    \\## Steps
+    \\-
+    \\
+    \\## Done When
+    \\-
+    \\
+;
+
+/// Initial content for art/template/plan_refactor.md
+pub const INITIAL_PLAN_REFACTOR_TEMPLATE =
+    \\```toml
+    \\item = { type = "string" }
+    \\date_long = { type = "string" }
+    \\day_tag = { type = "string" }
+    \\week_tag = { type = "string" }
+    \\month_tag = { type = "string" }
+    \\quarter_tag = { type = "string" }
+    \\```
+    \\
+    \\```@remove
+    \\> **Template Instructions**
+    \\>
+    \\> Do NOT edit this template directly. Create a new doc with `ligi p refactor <name>`.
+    \\```
+    \\
+    \\# Refactor Plan - {{ item }}
+    \\
+    \\Date: {{ date_long }}
+    \\
+    \\[[t/planning]] [[t/refactor]] [[t/{{ day_tag }}]] [[t/{{ week_tag }}]] [[t/{{ month_tag }}]] [[t/{{ quarter_tag }}]]
+    \\
+    \\## Motivation
+    \\-
+    \\
+    \\## Target Areas
+    \\-
+    \\
+    \\## Strategy
+    \\-
+    \\
+    \\## Safety / Rollout
+    \\-
+    \\
+    \\## Risks / Dependencies
+    \\-
+    \\
+    \\## Success Criteria
+    \\-
+    \\
+;
+
+/// Initial content for art/template/plan_refactor_short.md
+pub const INITIAL_PLAN_REFACTOR_SHORT_TEMPLATE =
+    \\```toml
+    \\item = { type = "string" }
+    \\date_long = { type = "string" }
+    \\day_tag = { type = "string" }
+    \\week_tag = { type = "string" }
+    \\month_tag = { type = "string" }
+    \\quarter_tag = { type = "string" }
+    \\```
+    \\
+    \\```@remove
+    \\> **Template Instructions**
+    \\>
+    \\> Do NOT edit this template directly. Create a new doc with `ligi p refactor <name> -l short`.
+    \\```
+    \\
+    \\# Refactor Plan - {{ item }}
+    \\
+    \\Date: {{ date_long }}
+    \\
+    \\[[t/planning]] [[t/refactor]] [[t/{{ day_tag }}]] [[t/{{ week_tag }}]] [[t/{{ month_tag }}]] [[t/{{ quarter_tag }}]]
+    \\
+    \\## Strategy
+    \\-
+    \\
+    \\## Done When
+    \\-
+    \\
+;
+
+/// Initial content for art/template/plan_perf.md
+pub const INITIAL_PLAN_PERF_TEMPLATE =
+    \\```toml
+    \\item = { type = "string" }
+    \\date_long = { type = "string" }
+    \\day_tag = { type = "string" }
+    \\week_tag = { type = "string" }
+    \\month_tag = { type = "string" }
+    \\quarter_tag = { type = "string" }
+    \\```
+    \\
+    \\```@remove
+    \\> **Template Instructions**
+    \\>
+    \\> Do NOT edit this template directly. Create a new doc with `ligi p perf <name>`.
+    \\```
+    \\
+    \\# Performance Plan - {{ item }}
+    \\
+    \\Date: {{ date_long }}
+    \\
+    \\[[t/planning]] [[t/perf]] [[t/{{ day_tag }}]] [[t/{{ week_tag }}]] [[t/{{ month_tag }}]] [[t/{{ quarter_tag }}]]
+    \\
+    \\## Baseline
+    \\-
+    \\
+    \\## Target
+    \\-
+    \\
+    \\## Hypothesis
+    \\-
+    \\
+    \\## Plan
+    \\-
+    \\
+    \\## Validation
+    \\-
+    \\
+    \\## Risks / Dependencies
+    \\-
+    \\
+;
+
+/// Initial content for art/template/plan_perf_short.md
+pub const INITIAL_PLAN_PERF_SHORT_TEMPLATE =
+    \\```toml
+    \\item = { type = "string" }
+    \\date_long = { type = "string" }
+    \\day_tag = { type = "string" }
+    \\week_tag = { type = "string" }
+    \\month_tag = { type = "string" }
+    \\quarter_tag = { type = "string" }
+    \\```
+    \\
+    \\```@remove
+    \\> **Template Instructions**
+    \\>
+    \\> Do NOT edit this template directly. Create a new doc with `ligi p perf <name> -l short`.
+    \\```
+    \\
+    \\# Performance Plan - {{ item }}
+    \\
+    \\Date: {{ date_long }}
+    \\
+    \\[[t/planning]] [[t/perf]] [[t/{{ day_tag }}]] [[t/{{ week_tag }}]] [[t/{{ month_tag }}]] [[t/{{ quarter_tag }}]]
+    \\
+    \\## Target
+    \\-
+    \\
+    \\## Approach
+    \\-
+    \\
+    \\## Validation
     \\-
     \\
 ;
@@ -1033,6 +1462,54 @@ pub fn run(
     const plan_quarter_path = try paths.joinPath(allocator, &.{ template_path, "plan_quarter.md" });
     defer allocator.free(plan_quarter_path);
     try createFileTracked(allocator, plan_quarter_path, INITIAL_PLAN_QUARTER_TEMPLATE, &result);
+
+    const plan_day_short_path = try paths.joinPath(allocator, &.{ template_path, "plan_day_short.md" });
+    defer allocator.free(plan_day_short_path);
+    try createFileTracked(allocator, plan_day_short_path, INITIAL_PLAN_DAY_SHORT_TEMPLATE, &result);
+
+    const plan_week_short_path = try paths.joinPath(allocator, &.{ template_path, "plan_week_short.md" });
+    defer allocator.free(plan_week_short_path);
+    try createFileTracked(allocator, plan_week_short_path, INITIAL_PLAN_WEEK_SHORT_TEMPLATE, &result);
+
+    const plan_month_short_path = try paths.joinPath(allocator, &.{ template_path, "plan_month_short.md" });
+    defer allocator.free(plan_month_short_path);
+    try createFileTracked(allocator, plan_month_short_path, INITIAL_PLAN_MONTH_SHORT_TEMPLATE, &result);
+
+    const plan_quarter_short_path = try paths.joinPath(allocator, &.{ template_path, "plan_quarter_short.md" });
+    defer allocator.free(plan_quarter_short_path);
+    try createFileTracked(allocator, plan_quarter_short_path, INITIAL_PLAN_QUARTER_SHORT_TEMPLATE, &result);
+
+    const plan_feature_path = try paths.joinPath(allocator, &.{ template_path, "plan_feature.md" });
+    defer allocator.free(plan_feature_path);
+    try createFileTracked(allocator, plan_feature_path, INITIAL_PLAN_FEATURE_TEMPLATE, &result);
+
+    const plan_feature_short_path = try paths.joinPath(allocator, &.{ template_path, "plan_feature_short.md" });
+    defer allocator.free(plan_feature_short_path);
+    try createFileTracked(allocator, plan_feature_short_path, INITIAL_PLAN_FEATURE_SHORT_TEMPLATE, &result);
+
+    const plan_chore_path = try paths.joinPath(allocator, &.{ template_path, "plan_chore.md" });
+    defer allocator.free(plan_chore_path);
+    try createFileTracked(allocator, plan_chore_path, INITIAL_PLAN_CHORE_TEMPLATE, &result);
+
+    const plan_chore_short_path = try paths.joinPath(allocator, &.{ template_path, "plan_chore_short.md" });
+    defer allocator.free(plan_chore_short_path);
+    try createFileTracked(allocator, plan_chore_short_path, INITIAL_PLAN_CHORE_SHORT_TEMPLATE, &result);
+
+    const plan_refactor_path = try paths.joinPath(allocator, &.{ template_path, "plan_refactor.md" });
+    defer allocator.free(plan_refactor_path);
+    try createFileTracked(allocator, plan_refactor_path, INITIAL_PLAN_REFACTOR_TEMPLATE, &result);
+
+    const plan_refactor_short_path = try paths.joinPath(allocator, &.{ template_path, "plan_refactor_short.md" });
+    defer allocator.free(plan_refactor_short_path);
+    try createFileTracked(allocator, plan_refactor_short_path, INITIAL_PLAN_REFACTOR_SHORT_TEMPLATE, &result);
+
+    const plan_perf_path = try paths.joinPath(allocator, &.{ template_path, "plan_perf.md" });
+    defer allocator.free(plan_perf_path);
+    try createFileTracked(allocator, plan_perf_path, INITIAL_PLAN_PERF_TEMPLATE, &result);
+
+    const plan_perf_short_path = try paths.joinPath(allocator, &.{ template_path, "plan_perf_short.md" });
+    defer allocator.free(plan_perf_short_path);
+    try createFileTracked(allocator, plan_perf_short_path, INITIAL_PLAN_PERF_SHORT_TEMPLATE, &result);
 
     // 10. Config file
     var config_dir: []const u8 = undefined;
