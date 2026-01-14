@@ -127,6 +127,22 @@ pub const INITIAL_LIGI_TAGS_DOC =
     \\
 ;
 
+/// Initial content for art/calendar.md
+pub const INITIAL_CALENDAR_DOC =
+    \\# Calendar
+    \\
+    \\This file is auto-maintained by `ligi plan`. Each section is newest-first.
+    \\
+    \\## Days
+    \\
+    \\## Weeks
+    \\
+    \\## Months
+    \\
+    \\## Quarters
+    \\
+;
+
 /// Initial content for AGENTS.md
 pub const INITIAL_AGENTS =
     \\# Ligi Agent Notes
@@ -698,6 +714,148 @@ pub const INITIAL_IMPL_SHORT_PLAN_TEMPLATE =
     \\
 ;
 
+/// Initial content for art/template/plan_day.md
+pub const INITIAL_PLAN_DAY_TEMPLATE =
+    \\```toml
+    \\date = { type = "string" }
+    \\date_long = { type = "string" }
+    \\day_tag = { type = "string" }
+    \\week_tag = { type = "string" }
+    \\month_tag = { type = "string" }
+    \\quarter_tag = { type = "string" }
+    \\prev_day_tag = { type = "string" }
+    \\prev_week_tag = { type = "string" }
+    \\```
+    \\
+    \\```@remove
+    \\> **Template Instructions**
+    \\>
+    \\> Do NOT edit this template directly. Create a new doc with `ligi p day`.
+    \\```
+    \\
+    \\# Daily Plan — {{ date_long }}
+    \\
+    \\[[t/planning]] [[t/{{ day_tag }}]] [[t/{{ week_tag }}]] [[t/{{ month_tag }}]] [[t/{{ quarter_tag }}]]
+    \\
+    \\## Review (required)
+    \\- Review yesterday: [[t/{{ prev_day_tag }}]]
+    \\- Review current week: [[t/{{ week_tag }}]]
+    \\- Review open work: `ligi q t TODO | planning`
+    \\
+    \\## Today
+    \\-
+    \\
+    \\## Commitments
+    \\-
+    \\
+    \\## Notes
+    \\-
+    \\
+;
+
+/// Initial content for art/template/plan_week.md
+pub const INITIAL_PLAN_WEEK_TEMPLATE =
+    \\```toml
+    \\week = { type = "string" }
+    \\week_tag = { type = "string" }
+    \\month_tag = { type = "string" }
+    \\quarter_tag = { type = "string" }
+    \\prev_week_tag = { type = "string" }
+    \\```
+    \\
+    \\```@remove
+    \\> **Template Instructions**
+    \\>
+    \\> Do NOT edit this template directly. Create a new doc with `ligi p week`.
+    \\```
+    \\
+    \\# Weekly Plan — {{ week }}
+    \\
+    \\[[t/planning]] [[t/{{ week_tag }}]] [[t/{{ month_tag }}]] [[t/{{ quarter_tag }}]]
+    \\
+    \\## Review (required)
+    \\- Review last week: [[t/{{ prev_week_tag }}]]
+    \\- Review open work: `ligi q t TODO | planning`
+    \\
+    \\## Goals
+    \\-
+    \\
+    \\## Scope
+    \\- In:
+    \\- Out:
+    \\
+    \\## Risks / Dependencies
+    \\-
+    \\
+;
+
+/// Initial content for art/template/plan_month.md
+pub const INITIAL_PLAN_MONTH_TEMPLATE =
+    \\```toml
+    \\month = { type = "string" }
+    \\month_tag = { type = "string" }
+    \\quarter_tag = { type = "string" }
+    \\prev_month_tag = { type = "string" }
+    \\```
+    \\
+    \\```@remove
+    \\> **Template Instructions**
+    \\>
+    \\> Do NOT edit this template directly. Create a new doc with `ligi p month`.
+    \\```
+    \\
+    \\# Monthly Plan — {{ month }}
+    \\
+    \\[[t/planning]] [[t/{{ month_tag }}]] [[t/{{ quarter_tag }}]]
+    \\
+    \\## Review (required)
+    \\- Review last month: [[t/{{ prev_month_tag }}]]
+    \\- Review open work: `ligi q t TODO | planning`
+    \\
+    \\## Goals
+    \\-
+    \\
+    \\## Milestones
+    \\-
+    \\
+    \\## Risks / Dependencies
+    \\-
+    \\
+;
+
+/// Initial content for art/template/plan_quarter.md
+pub const INITIAL_PLAN_QUARTER_TEMPLATE =
+    \\```toml
+    \\quarter = { type = "string" }
+    \\quarter_tag = { type = "string" }
+    \\prev_quarter_tag = { type = "string" }
+    \\```
+    \\
+    \\```@remove
+    \\> **Template Instructions**
+    \\>
+    \\> Do NOT edit this template directly. Create a new doc with `ligi p quarter`.
+    \\```
+    \\
+    \\# Quarterly Plan — {{ quarter }}
+    \\
+    \\[[t/planning]] [[t/{{ quarter_tag }}]]
+    \\
+    \\## Review (required)
+    \\- Review last quarter: [[t/{{ prev_quarter_tag }}]]
+    \\- Review open work: `ligi q t TODO | planning`
+    \\
+    \\## Themes
+    \\-
+    \\
+    \\## Outcomes
+    \\-
+    \\
+    \\## Risks / Dependencies
+    \\-
+    \\
+;
+
 /// Result of init operation for reporting
 pub const InitResult = struct {
     created_dirs: std.ArrayList([]const u8) = .empty,
@@ -803,6 +961,10 @@ pub fn run(
     defer allocator.free(tags_doc_path);
     try createFileTracked(allocator, tags_doc_path, INITIAL_LIGI_TAGS_DOC, &result);
 
+    const calendar_path = try paths.joinPath(allocator, &.{ art_path, "calendar.md" });
+    defer allocator.free(calendar_path);
+    try createFileTracked(allocator, calendar_path, INITIAL_CALENDAR_DOC, &result);
+
     // 4. AGENTS.md in base path
     const agents_path = try paths.joinPath(allocator, &.{ base_path, "AGENTS.md" });
     defer allocator.free(agents_path);
@@ -855,6 +1017,22 @@ pub fn run(
     const impl_short_plan_path = try paths.joinPath(allocator, &.{ template_path, "impl_short_plan.md" });
     defer allocator.free(impl_short_plan_path);
     try createFileTracked(allocator, impl_short_plan_path, INITIAL_IMPL_SHORT_PLAN_TEMPLATE, &result);
+
+    const plan_day_path = try paths.joinPath(allocator, &.{ template_path, "plan_day.md" });
+    defer allocator.free(plan_day_path);
+    try createFileTracked(allocator, plan_day_path, INITIAL_PLAN_DAY_TEMPLATE, &result);
+
+    const plan_week_path = try paths.joinPath(allocator, &.{ template_path, "plan_week.md" });
+    defer allocator.free(plan_week_path);
+    try createFileTracked(allocator, plan_week_path, INITIAL_PLAN_WEEK_TEMPLATE, &result);
+
+    const plan_month_path = try paths.joinPath(allocator, &.{ template_path, "plan_month.md" });
+    defer allocator.free(plan_month_path);
+    try createFileTracked(allocator, plan_month_path, INITIAL_PLAN_MONTH_TEMPLATE, &result);
+
+    const plan_quarter_path = try paths.joinPath(allocator, &.{ template_path, "plan_quarter.md" });
+    defer allocator.free(plan_quarter_path);
+    try createFileTracked(allocator, plan_quarter_path, INITIAL_PLAN_QUARTER_TEMPLATE, &result);
 
     // 10. Config file
     var config_dir: []const u8 = undefined;

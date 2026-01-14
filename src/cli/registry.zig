@@ -142,6 +142,20 @@ pub const COMMANDS = [_]CommandDef{
         ,
     },
     .{
+        .canonical = "plan",
+        .names = &.{ "plan", "p" },
+        .description = "Create planning docs and update the calendar",
+        .long_description =
+        \\Create planning docs from templates and update art/calendar.md.
+        \\
+        \\Usage:
+        \\  ligi p day [-d YYYY-MM-DD]
+        \\  ligi p week [-d YYYY-MM-DD]
+        \\  ligi p month [-d YYYY-MM-DD]
+        \\  ligi p quarter [-d YYYY-MM-DD]
+        ,
+    },
+    .{
         .canonical = "v",
         .names = &.{ "v", "voice" },
         .description = "Record and transcribe audio locally (Linux only)",
@@ -267,6 +281,17 @@ const BackupParams = clap.parseParamsComptime(
     \\-i, --install         Install cron job for global backup
     \\-s, --schedule <str>  Cron schedule (default: "0 3 * * *")
     \\-q, --quiet           Suppress non-error output
+    \\
+);
+
+/// Plan command options
+const PlanParams = clap.parseParamsComptime(
+    \\-h, --help           Show this help message
+    \\-d, --date <str>     Date for plan tags (YYYY-MM-DD or YY-MM-DD, default: today)
+    \\-l, --length <str>   Template length: long|short (default: long)
+    \\-i, --inbox          Place output in art/inbox
+    \\--no-inbox           Place output outside inbox
+    \\<str>...
     \\
 );
 
@@ -405,6 +430,8 @@ pub fn run(
         return runBackupCommand(allocator, remaining_args, global_args.quiet != 0, stdout, stderr);
     } else if (std.mem.eql(u8, cmd.canonical, "fill")) {
         return runFillCommand(allocator, remaining_args, stdout, stderr);
+    } else if (std.mem.eql(u8, cmd.canonical, "plan")) {
+        return runPlanCommand(allocator, remaining_args, global_args.quiet != 0, stdout, stderr);
     } else if (std.mem.eql(u8, cmd.canonical, "v")) {
         return runVoiceCommand(allocator, remaining_args, stdout, stderr);
     } else if (std.mem.eql(u8, cmd.canonical, "serve")) {
@@ -559,6 +586,72 @@ fn runFillCommand(
         stdout,
         stderr,
     );
+}
+
+/// Run the plan command
+fn runPlanCommand(
+    allocator: std.mem.Allocator,
+    args: []const []const u8,
+    global_quiet: bool,
+    stdout: anytype,
+    stderr: anytype,
+) !u8 {
+    var diag: clap.Diagnostic = .{};
+    var iter = clap.args.SliceIterator{ .args = args };
+
+    var res = clap.parseEx(clap.Help, &PlanParams, clap.parsers.default, &iter, .{
+        .diagnostic = &diag,
+        .allocator = allocator,
+    }) catch |err| {
+        try diag.report(stderr, err);
+        return 1;
+    };
+    defer res.deinit();
+
+    if (res.args.help != 0) {
+        const registry = buildRegistry();
+        if (registry.findCommand("plan")) |cmd| {
+            try registry.printCommandHelp(cmd, stdout);
+        }
+        try stdout.writeAll("\nOptions:\n");
+        try stdout.writeAll("  -d, --date <str>     Date for plan tags (YYYY-MM-DD or YY-MM-DD, default: today)\n");
+        try stdout.writeAll("  -l, --length <str>   Template length: long|short (default: long)\n");
+        try stdout.writeAll("  -i, --inbox          Place output in art/inbox\n");
+        try stdout.writeAll("  --no-inbox           Place output outside inbox\n");
+        return 0;
+    }
+
+    const positionals = res.positionals[0];
+    if (positionals.len == 0) {
+        try stderr.writeAll("error: plan requires a subcommand (day|week|month|quarter)\n");
+        return 1;
+    }
+
+    const plan_cmd = @import("commands/plan.zig");
+    const kind = plan_cmd.parseKind(positionals[0]) orelse {
+        try stderr.print("error: plan: unknown type '{s}'\n", .{positionals[0]});
+        return 1;
+    };
+
+    const length = if (res.args.length) |len_str| blk: {
+        break :blk plan_cmd.parseLength(len_str) orelse {
+            try stderr.print("error: plan: invalid length '{s}' (expected long|short)\n", .{len_str});
+            return 1;
+        };
+    } else plan_cmd.PlanLength.long;
+
+    const inbox = if (res.args.inbox != 0) true else if (res.args.@"no-inbox" != 0) false else null;
+
+    const name = if (positionals.len > 1) positionals[1] else null;
+
+    return plan_cmd.run(allocator, .{
+        .kind = kind,
+        .name = name,
+        .date_arg = res.args.date,
+        .length = length,
+        .inbox = inbox,
+        .quiet = global_quiet,
+    }, stdout, stderr);
 }
 
 /// Run the voice command with clap parsing

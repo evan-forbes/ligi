@@ -11,37 +11,38 @@
     const fileListEl = document.getElementById('file-list');
     const contentEl = document.getElementById('content');
 
-    // Configure marked for GFM
-    marked.setOptions({
+    // Utility: escape HTML (defined early for use in marked extension)
+    function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+
+    // Configure marked for GFM with mermaid extension
+    marked.use({
         gfm: true,
         breaks: true,
-        headerIds: true,
-        mangle: false,
-        langPrefix: 'language-'
-    });
-
-    // Custom renderer for mermaid blocks (supports marked v15 token API + legacy args)
-    const renderer = new marked.Renderer();
-    const originalCode = renderer.code.bind(renderer);
-
-    renderer.code = function(code, language, escaped) {
-        if (code && typeof code === 'object') {
-            const token = code;
-            const lang = (token.lang || '').trim().toLowerCase().split(/\s+/)[0];
-            if (lang === 'mermaid') {
-                return '<div class="mermaid">' + escapeHtml(token.text || '') + '</div>';
+        extensions: [{
+            name: 'mermaid',
+            level: 'block',
+            start(src) {
+                return src.match(/^```mermaid/m)?.index;
+            },
+            tokenizer(src) {
+                const match = src.match(/^```mermaid\s*\n([\s\S]*?)```/);
+                if (match) {
+                    return {
+                        type: 'mermaid',
+                        raw: match[0],
+                        text: match[1].trim()
+                    };
+                }
+            },
+            renderer(token) {
+                return '<div class="mermaid">' + escapeHtml(token.text) + '</div>';
             }
-            return originalCode(token);
-        }
-
-        const lang = (language || '').trim().toLowerCase().split(/\s+/)[0];
-        if (lang === 'mermaid') {
-            return '<div class="mermaid">' + escapeHtml(code) + '</div>';
-        }
-        return originalCode(code, language, escaped);
-    };
-
-    marked.use({ renderer: renderer });
+        }]
+    });
 
     const languageAliases = {
         'c++': 'cpp',
@@ -146,13 +147,6 @@
         '.svg',
         '.webp'
     ]);
-
-    // Utility: escape HTML
-    function escapeHtml(text) {
-        const div = document.createElement('div');
-        div.textContent = text;
-        return div.innerHTML;
-    }
 
     function safeDecode(value) {
         try {
