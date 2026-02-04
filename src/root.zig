@@ -49,4 +49,7 @@ test {
     _ = @import("serve/mod.zig");
     _ = @import("serve/path.zig");
     _ = @import("serve/assets.zig");
+
+    // TTS tests
+    _ = @import("tts/ssml.zig");
 }
