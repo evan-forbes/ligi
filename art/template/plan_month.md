@@ -1,8 +1,7 @@
 ```toml
 month = { type = "string" }
-month_tag = { type = "string" }
-quarter_tag = { type = "string" }
-prev_month_tag = { type = "string" }
+day_tag = { type = "string" }
+week_tag = { type = "string" }
 ```
 
 ```@remove
@@ -13,10 +12,9 @@ prev_month_tag = { type = "string" }
 
 # Monthly Plan — {{ month }}
 
-[[t/planning]] [[t/{{ month_tag }}]] [[t/{{ quarter_tag }}]]
+[[t/planning]] [[t/{{ day_tag }}]] [[t/{{ week_tag }}]]
 
 ## Review (required)
-- Review last month: [[t/{{ prev_month_tag }}]]
 - Review open work: `ligi q t TODO | planning`
 
 ## Goals

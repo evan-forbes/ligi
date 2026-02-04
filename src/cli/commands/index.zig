@@ -12,6 +12,8 @@ const config = core.config;
 const fs = core.fs;
 const paths = core.paths;
 const global_index = core.global_index;
+const workspace = core.workspace;
+const ligi_log = core.log;
 
 /// Run the index command
 pub fn run(
@@ -20,6 +22,7 @@ pub fn run(
     file: ?[]const u8,
     tags_arg: ?[]const u8,
     global: bool,
+    org: bool,
     no_local: bool,
     quiet: bool,
     stdout: anytype,
@@ -48,6 +51,9 @@ pub fn run(
         if (root != null) {
             try stderr.writeAll("error: --root is not compatible with --global\n");
             return 1;
+        }
+        if (org) {
+            try stderr.writeAll("warning: --org is deprecated and ignored with --global\n");
         }
         // Load global index
         var index = switch (global_index.loadGlobalIndex(arena_alloc)) {
@@ -92,11 +98,13 @@ pub fn run(
         return 0;
     }
 
-    // Resolve root directory
-    const root_path = root orelse ".";
+    // Handle --org: deprecated, behaves like default now
+    if (org) {
+        try stderr.writeAll("warning: --org is deprecated (indexing now uses workspace detection automatically)\n");
+    }
 
-    // Build art path
-    const art_path = try paths.getLocalArtPath(arena_alloc, root_path);
+    // Resolve art path via workspace detection
+    const art_path = try workspace.resolveArtPath(arena_alloc, root, stderr) orelse return 1;
 
     // Check art directory exists
     if (!fs.dirExists(art_path)) {
@@ -110,8 +118,9 @@ pub fn run(
             try stderr.print("error: file outside art directory: {s} (must be under {s})\n", .{ f, art_path });
             return 1;
         }
-        // Check file exists
-        const full_file_path = try std.fs.path.join(arena_alloc, &.{ root_path, f });
+        // Check file exists (resolve relative to workspace root, parent of art/)
+        const file_ws_root = std.fs.path.dirname(art_path) orelse ".";
+        const full_file_path = try std.fs.path.join(arena_alloc, &.{ file_ws_root, f });
         if (!fs.fileExists(full_file_path)) {
             try stderr.print("error: file not found: {s}\n", .{full_file_path});
             return 1;
@@ -183,8 +192,9 @@ pub fn run(
         tags_filled = try tag_index.fillAllTagLinks(arena_alloc, art_path, follow_symlinks, ignore_patterns, stdout, quiet);
     }
 
-    // Write global indexes
-    tag_index.writeGlobalIndexes(arena_alloc, &tag_map, root_path, stdout, quiet) catch |err| {
+    // Write global indexes (root is parent of art/)
+    const ws_root = std.fs.path.dirname(art_path) orelse ".";
+    tag_index.writeGlobalIndexes(arena_alloc, &tag_map, ws_root, stdout, quiet) catch |err| {
         // Warn but don't fail if global write fails
         try stderr.print("warning: failed to update global index: {s}\n", .{@errorName(err)});
     };
@@ -199,6 +209,14 @@ pub fn run(
             // Already printed by writeLocalIndexes
         }
     }
+
+    // Structured log
+    ligi_log.log(arena_alloc, art_path, .{
+        .timestamp = ligi_log.now(),
+        .command = "index",
+        .action = "complete",
+        .count = tag_count,
+    });
 
     return 0;
 }
@@ -348,6 +366,160 @@ fn insertTagsIntoFile(
     }
 
     return new_tags.items.len;
+}
+
+/// Index statistics for org-wide indexing
+pub const OrgIndexStats = struct {
+    repos_indexed: usize = 0,
+    total_files: usize = 0,
+    total_tags: usize = 0,
+};
+
+/// Run indexing for all repos in an organization.
+fn runOrgIndex(
+    allocator: std.mem.Allocator,
+    root_override: ?[]const u8,
+    no_local: bool,
+    quiet: bool,
+    stdout: anytype,
+    stderr: anytype,
+) !u8 {
+    _ = no_local; // Reserved for future: skip local index updates
+
+    // Determine the starting path
+    const start_path = if (root_override) |r| r else ".";
+    const cwd = std.fs.cwd().realpathAlloc(allocator, start_path) catch |err| {
+        try stderr.print("error: failed to resolve path: {s}\n", .{@errorName(err)});
+        return 1;
+    };
+    defer allocator.free(cwd);
+
+    // Detect workspace to find org root
+    const ws_result = workspace.detectWorkspace(allocator, cwd);
+    if (ws_result != .ok) {
+        try stderr.writeAll("error: not in a ligi workspace (run 'ligi init' first)\n");
+        return 1;
+    }
+    var ctx = ws_result.ok;
+    defer ctx.deinit();
+
+    // Determine the org root to use
+    const org_root: []const u8 = blk: {
+        if (ctx.type == .org) {
+            // Already in an org workspace
+            break :blk ctx.root;
+        } else if (ctx.org_root) |org| {
+            // In a repo that belongs to an org
+            break :blk org;
+        } else {
+            try stderr.writeAll("error: not in an organization workspace (use --org from within an org or registered repo)\n");
+            return 1;
+        }
+    };
+
+    // Get list of registered repos
+    const repos = workspace.getOrgRepos(allocator, org_root) catch |err| {
+        if (err == error.ConfigNotFound) {
+            try stderr.writeAll("error: org config not found\n");
+        } else {
+            try stderr.print("error: failed to read org repos: {s}\n", .{@errorName(err)});
+        }
+        return 1;
+    };
+    defer {
+        for (repos) |r| allocator.free(r);
+        allocator.free(repos);
+    }
+
+    if (repos.len == 0) {
+        if (!quiet) {
+            try stdout.writeAll("no repos registered in org\n");
+        }
+        return 0;
+    }
+
+    if (!quiet) {
+        try stdout.print("indexing {d} repo(s) in org...\n", .{repos.len});
+    }
+
+    var stats: OrgIndexStats = .{};
+    const cfg = config.getDefaultConfig();
+
+    // Index each repo
+    for (repos) |repo_path| {
+        // Check if repo exists
+        const art_path = std.fs.path.join(allocator, &.{ repo_path, "art" }) catch continue;
+        defer allocator.free(art_path);
+
+        if (!fs.dirExists(art_path)) {
+            if (!quiet) {
+                try stderr.print("warning: skipping {s} (no art/ directory)\n", .{repo_path});
+            }
+            continue;
+        }
+
+        if (!quiet) {
+            const repo_name = std.fs.path.basename(repo_path);
+            try stdout.print("  indexing {s}...\n", .{repo_name});
+        }
+
+        // Collect tags for this repo
+        var tag_map = tag_index.collectTags(
+            allocator,
+            art_path,
+            null,
+            cfg.index.follow_symlinks,
+            cfg.index.ignore_patterns,
+            stderr,
+        ) catch {
+            if (!quiet) {
+                try stderr.print("warning: failed to index {s}\n", .{repo_path});
+            }
+            continue;
+        };
+        defer tag_map.deinit();
+
+        // Count files and tags
+        var file_count: usize = 0;
+        var tag_it = tag_map.map.iterator();
+        while (tag_it.next()) |entry| {
+            file_count += entry.value_ptr.items.len;
+        }
+
+        // Write local indexes
+        _ = tag_index.writeLocalIndexes(allocator, art_path, &tag_map, stdout, true) catch {
+            if (!quiet) {
+                try stderr.print("warning: failed to write indexes for {s}\n", .{repo_path});
+            }
+            continue;
+        };
+
+        // Fill tag links
+        _ = tag_index.fillAllTagLinks(allocator, art_path, cfg.index.follow_symlinks, cfg.index.ignore_patterns, stdout, true) catch {
+            // Non-fatal
+        };
+
+        stats.repos_indexed += 1;
+        stats.total_files += file_count;
+        stats.total_tags += tag_map.map.count();
+    }
+
+    // Create unified org-level index
+    const org_art = std.fs.path.join(allocator, &.{ org_root, "art" }) catch {
+        try stderr.writeAll("error: failed to build org art path\n");
+        return 1;
+    };
+    defer allocator.free(org_art);
+
+    // Write org-level summary index
+    if (!quiet) {
+        try stdout.print("\norg index complete:\n", .{});
+        try stdout.print("  repos indexed: {d}\n", .{stats.repos_indexed});
+        try stdout.print("  total files: {d}\n", .{stats.total_files});
+        try stdout.print("  unique tags: {d}\n", .{stats.total_tags});
+    }
+
+    return 0;
 }
 
 // ============================================================================

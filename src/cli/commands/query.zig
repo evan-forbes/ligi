@@ -12,6 +12,8 @@ const tag_index = core.tag_index;
 const config = core.config;
 const fs = core.fs;
 const paths = core.paths;
+const workspace = core.workspace;
+const global_index = core.global_index;
 const clipboard = @import("../../template/clipboard.zig");
 
 /// Output format for query results
@@ -47,11 +49,15 @@ pub fn run(
         try stdout.writeAll("Usage: ligi q t <tag> [options]\n\n");
         try stdout.writeAll("Query documents by tags.\n\n");
         try stdout.writeAll("Examples:\n");
-        try stdout.writeAll("  ligi q t project           Query single tag\n");
+        try stdout.writeAll("  ligi q t project           Query single tag in current repo\n");
+        try stdout.writeAll("  ligi q t project --org     Query across all org repos\n");
+        try stdout.writeAll("  ligi q t project --global  Query across all registered repos\n");
         try stdout.writeAll("  ligi q t project \\& done   Query intersection (AND)\n");
         try stdout.writeAll("  ligi q t project \\| todo   Query union (OR)\n\n");
         try stdout.writeAll("Options:\n");
         try stdout.writeAll("  -r, --root <path>     Repository root directory\n");
+        try stdout.writeAll("  --org                 Search all repos in organization\n");
+        try stdout.writeAll("  --global              Search all globally registered repos\n");
         try stdout.writeAll("  -a, --absolute        Output absolute paths\n");
         try stdout.writeAll("  -o, --output <fmt>    Output format: text or json\n");
         try stdout.writeAll("  -c, --clipboard       Copy output to clipboard\n");
@@ -83,6 +89,8 @@ fn runTagQuery(
     var output_format: OutputFormat = .text;
     var copy_to_clipboard = false;
     var auto_index = true;
+    var search_org = false;
+    var search_global = false;
 
     // Collect tag expression tokens
     var tokens: std.ArrayList([]const u8) = .empty;
@@ -116,6 +124,10 @@ fn runTagQuery(
             }
         } else if (std.mem.eql(u8, arg, "-c") or std.mem.eql(u8, arg, "--clipboard")) {
             copy_to_clipboard = true;
+        } else if (std.mem.eql(u8, arg, "--org")) {
+            search_org = true;
+        } else if (std.mem.eql(u8, arg, "--global")) {
+            search_global = true;
         } else if (std.mem.eql(u8, arg, "--index")) {
             i += 1;
             if (i >= args.len) {
@@ -135,6 +147,8 @@ fn runTagQuery(
             try stdout.writeAll("Query documents by tags.\n\n");
             try stdout.writeAll("Options:\n");
             try stdout.writeAll("  -r, --root <path>     Repository root directory\n");
+            try stdout.writeAll("  --org                 Search all repos in organization\n");
+            try stdout.writeAll("  --global              Search all globally registered repos\n");
             try stdout.writeAll("  -a, --absolute        Output absolute paths\n");
             try stdout.writeAll("  -o, --output <fmt>    Output format: text or json\n");
             try stdout.writeAll("  -c, --clipboard       Copy output to clipboard\n");
@@ -145,27 +159,76 @@ fn runTagQuery(
         }
     }
 
+    // Validate flag combinations
+    if (search_org and search_global) {
+        try stderr.writeAll("error: --org and --global are mutually exclusive\n");
+        return 1;
+    }
+
     if (tokens.items.len == 0) {
         try stderr.writeAll("error: no tag specified\n");
         try stderr.writeAll("usage: ligi q t <tag>\n");
         return 1;
     }
 
-    // Resolve paths
-    const root_path = root orelse ".";
-    const art_path = try paths.getLocalArtPath(arena_alloc, root_path);
+    // Collect art paths to search based on scope
+    var art_paths: std.ArrayList([]const u8) = .empty;
+    var repo_roots: std.ArrayList([]const u8) = .empty;
 
-    // Check art directory exists
-    if (!fs.dirExists(art_path)) {
-        try stderr.print("error: art directory not found: {s}\n", .{art_path});
+    if (search_global) {
+        // Search all globally registered repos
+        var index = switch (global_index.loadGlobalIndex(arena_alloc)) {
+            .ok => |idx| idx,
+            .err => |e| {
+                try e.write(stderr);
+                return e.exitCode();
+            },
+        };
+        defer index.deinit();
+
+        for (index.repos.items) |repo_path| {
+            const repo_art = try std.fs.path.join(arena_alloc, &.{ repo_path, "art" });
+            if (fs.dirExists(repo_art)) {
+                try art_paths.append(arena_alloc, repo_art);
+                try repo_roots.append(arena_alloc, try arena_alloc.dupe(u8, repo_path));
+            }
+        }
+    } else if (search_org) {
+        // --org is deprecated, behaves like default now
+        try stderr.writeAll("warning: --org is deprecated (queries now use workspace detection automatically)\n");
+
+        const art_path = try workspace.resolveArtPath(arena_alloc, root, stderr) orelse return 1;
+        if (!fs.dirExists(art_path)) {
+            try stderr.print("error: art directory not found: {s}\n", .{art_path});
+            return 1;
+        }
+        const ws_root = std.fs.path.dirname(art_path) orelse ".";
+        try art_paths.append(arena_alloc, art_path);
+        try repo_roots.append(arena_alloc, try arena_alloc.dupe(u8, ws_root));
+    } else {
+        // Search using workspace detection (default)
+        const art_path = try workspace.resolveArtPath(arena_alloc, root, stderr) orelse return 1;
+
+        if (!fs.dirExists(art_path)) {
+            try stderr.print("error: art directory not found: {s}\n", .{art_path});
+            return 1;
+        }
+        const ws_root = std.fs.path.dirname(art_path) orelse ".";
+        try art_paths.append(arena_alloc, art_path);
+        try repo_roots.append(arena_alloc, try arena_alloc.dupe(u8, ws_root));
+    }
+
+    if (art_paths.items.len == 0) {
+        try stderr.writeAll("error: no repositories to search\n");
         return 1;
     }
 
-    // Auto-index if needed
-    if (auto_index) {
+    // Auto-index if needed (only for single repo search)
+    if (auto_index and !search_org and !search_global and art_paths.items.len == 1) {
+        const art_path = art_paths.items[0];
+        const root_path = repo_roots.items[0];
         const stale = try tag_index.isIndexStale(arena_alloc, art_path);
         if (stale) {
-            // Run indexing
             const cfg = config.getDefaultConfig();
             var tag_map = try tag_index.collectTags(
                 arena_alloc,
@@ -178,13 +241,11 @@ fn runTagQuery(
             defer tag_map.deinit();
 
             _ = try tag_index.writeLocalIndexes(arena_alloc, art_path, &tag_map, stdout, quiet);
-
-            // Try to update global index too
             tag_index.writeGlobalIndexes(arena_alloc, &tag_map, root_path, stdout, quiet) catch {};
         }
     }
 
-    // Evaluate query expression
+    // Evaluate query expression across all repos
     var result_set = std.StringHashMap(void).init(arena_alloc);
     var first_tag = true;
     var current_op: enum { none, and_op, or_op } = .none;
@@ -200,45 +261,37 @@ fn runTagQuery(
             continue;
         }
 
-        // It's a tag - load its files
-        const tag_path = try std.fs.path.join(arena_alloc, &.{ art_path, "index", "tags", token });
-        const tag_file = try std.fmt.allocPrint(arena_alloc, "{s}.md", .{tag_path});
+        // It's a tag - load its files from all repos
+        var tag_files: std.ArrayList([]const u8) = .empty;
 
-        const files = tag_index.readTagIndex(arena_alloc, tag_file) catch |err| {
-            if (err == error.FileNotFound) {
-                // Tag not found - empty set
-                if (first_tag) {
-                    // First tag not found, result is empty
-                    first_tag = false;
-                    continue;
-                }
-                // For AND, empty intersection
-                // For OR, just skip this tag
-                if (current_op == .and_op) {
-                    result_set.clearAndFree();
-                }
-                continue;
+        for (art_paths.items, repo_roots.items) |art_path, repo_root| {
+            const tag_path = std.fs.path.join(arena_alloc, &.{ art_path, "index", "tags", token }) catch continue;
+            const tag_file = std.fmt.allocPrint(arena_alloc, "{s}.md", .{tag_path}) catch continue;
+
+            const files = tag_index.readTagIndex(arena_alloc, tag_file) catch continue;
+
+            // Prefix paths with repo root for multi-repo search
+            for (files) |f| {
+                const full_path = if (search_org or search_global)
+                    std.fs.path.join(arena_alloc, &.{ repo_root, f }) catch continue
+                else
+                    arena_alloc.dupe(u8, f) catch continue;
+                tag_files.append(arena_alloc, full_path) catch continue;
             }
-            return err;
-        };
-        defer {
-            for (files) |f| arena_alloc.free(f);
-            arena_alloc.free(files);
         }
 
         if (first_tag) {
             // Initialize result set
-            for (files) |f| {
-                const key = try arena_alloc.dupe(u8, f);
-                try result_set.put(key, {});
+            for (tag_files.items) |f| {
+                try result_set.put(f, {});
             }
             first_tag = false;
         } else {
             switch (current_op) {
-                .and_op => {
+                .and_op, .none => {
                     // Intersect with current result
                     var new_files = std.StringHashMap(void).init(arena_alloc);
-                    for (files) |f| {
+                    for (tag_files.items) |f| {
                         try new_files.put(f, {});
                     }
 
@@ -255,29 +308,10 @@ fn runTagQuery(
                 },
                 .or_op => {
                     // Union with current result
-                    for (files) |f| {
+                    for (tag_files.items) |f| {
                         if (!result_set.contains(f)) {
-                            const key = try arena_alloc.dupe(u8, f);
-                            try result_set.put(key, {});
+                            try result_set.put(f, {});
                         }
-                    }
-                },
-                .none => {
-                    // No operator, treat as implicit AND
-                    var new_files = std.StringHashMap(void).init(arena_alloc);
-                    for (files) |f| {
-                        try new_files.put(f, {});
-                    }
-
-                    var to_remove: std.ArrayList([]const u8) = .empty;
-                    var it = result_set.keyIterator();
-                    while (it.next()) |key| {
-                        if (!new_files.contains(key.*)) {
-                            try to_remove.append(arena_alloc, key.*);
-                        }
-                    }
-                    for (to_remove.items) |key| {
-                        _ = result_set.remove(key);
                     }
                 },
             }
@@ -301,10 +335,18 @@ fn runTagQuery(
     // Convert to absolute paths if requested
     var output_paths: std.ArrayList([]const u8) = .empty;
     if (absolute) {
-        const abs_root = std.fs.cwd().realpathAlloc(arena_alloc, root_path) catch root_path;
         for (result_list.items) |path| {
-            const abs_path = try std.fs.path.join(arena_alloc, &.{ abs_root, path });
-            try output_paths.append(arena_alloc, abs_path);
+            // For multi-repo search, paths are already absolute or repo-prefixed
+            // For single repo, prefix with abs root
+            if (search_org or search_global) {
+                const abs_path = std.fs.cwd().realpathAlloc(arena_alloc, path) catch path;
+                try output_paths.append(arena_alloc, abs_path);
+            } else {
+                const root_path = repo_roots.items[0];
+                const abs_root = std.fs.cwd().realpathAlloc(arena_alloc, root_path) catch root_path;
+                const abs_path = try std.fs.path.join(arena_alloc, &.{ abs_root, path });
+                try output_paths.append(arena_alloc, abs_path);
+            }
         }
     } else {
         for (result_list.items) |path| {

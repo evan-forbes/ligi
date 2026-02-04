@@ -1,7 +1,7 @@
 ```toml
 quarter = { type = "string" }
-quarter_tag = { type = "string" }
-prev_quarter_tag = { type = "string" }
+day_tag = { type = "string" }
+week_tag = { type = "string" }
 ```
 
 ```@remove
@@ -12,10 +12,9 @@ prev_quarter_tag = { type = "string" }
 
 # Quarterly Plan - {{ quarter }}
 
-[[t/planning]] [[t/{{ quarter_tag }}]]
+[[t/planning]] [[t/{{ day_tag }}]] [[t/{{ week_tag }}]]
 
 ## Review
-- Last quarter: [[t/{{ prev_quarter_tag }}]]
 
 ## Themes
 -

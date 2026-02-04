@@ -1022,15 +1022,24 @@ pub fn writeLocalIndexes(
     const tag_index_content = try renderTagIndex(allocator, tag_map);
     defer allocator.free(tag_index_content);
 
-    try writeFile(tag_index_path, tag_index_content);
-    if (!quiet) {
-        if (existed) {
-            try stdout.print("updated: {s}\n", .{tag_index_path});
-            updated += 1;
-        } else {
-            try stdout.print("created: {s}\n", .{tag_index_path});
-            created += 1;
-        }
+    switch (fs.writeFileIfChanged(tag_index_path, tag_index_content, allocator)) {
+        .ok => |was_written| {
+            if (was_written) {
+                if (!quiet) {
+                    if (existed) {
+                        try stdout.print("updated: {s}\n", .{tag_index_path});
+                        updated += 1;
+                    } else {
+                        try stdout.print("created: {s}\n", .{tag_index_path});
+                        created += 1;
+                    }
+                }
+            }
+        },
+        .err => |e| {
+            std.debug.print("error: cannot write index file: {s}: {s}\n", .{ tag_index_path, e.context.message });
+            return error.WriteError;
+        },
     }
 
     // Write per-tag index files
@@ -1057,15 +1066,23 @@ pub fn writeLocalIndexes(
         const content = try renderPerTagIndex(allocator, tag, files.items);
         defer allocator.free(content);
 
-        try writeFile(full_path, content);
-        if (!quiet) {
-            if (tag_existed) {
-                try stdout.print("updated: {s}\n", .{full_path});
-                updated += 1;
-            } else {
-                try stdout.print("created: {s}\n", .{full_path});
-                created += 1;
-            }
+        switch (fs.writeFileIfChanged(full_path, content, allocator)) {
+            .ok => |was_written| {
+                if (was_written) {
+                    if (!quiet) {
+                        if (tag_existed) {
+                            try stdout.print("updated: {s}\n", .{full_path});
+                            updated += 1;
+                        } else {
+                            try stdout.print("created: {s}\n", .{full_path});
+                            created += 1;
+                        }
+                    }
+                }
+            },
+            .err => |e| {
+                std.debug.print("error: cannot write index file: {s}: {s}\n", .{ full_path, e.context.message });
+            },
         }
     }
 
@@ -1089,15 +1106,23 @@ pub fn writeLocalIndexes(
             defer allocator.free(empty);
 
             const tag_existed = fs.fileExists(full_path);
-            try writeFile(full_path, empty);
-            if (!quiet) {
-                if (tag_existed) {
-                    try stdout.print("updated: {s}\n", .{full_path});
-                    updated += 1;
-                } else {
-                    try stdout.print("created: {s}\n", .{full_path});
-                    created += 1;
-                }
+            switch (fs.writeFileIfChanged(full_path, empty, allocator)) {
+                .ok => |was_written| {
+                    if (was_written) {
+                        if (!quiet) {
+                            if (tag_existed) {
+                                try stdout.print("updated: {s}\n", .{full_path});
+                                updated += 1;
+                            } else {
+                                try stdout.print("created: {s}\n", .{full_path});
+                                created += 1;
+                            }
+                        }
+                    }
+                },
+                .err => |e| {
+                    std.debug.print("error: cannot write index file: {s}: {s}\n", .{ full_path, e.context.message });
+                },
             }
         }
     }
@@ -1278,13 +1303,19 @@ pub fn writeGlobalIndexes(
         }
 
         const tag_existed = fs.fileExists(full_path);
-        try writeFile(full_path, tag_output.items);
-        if (!quiet) {
-            if (tag_existed) {
-                try stdout.print("updated: {s}\n", .{full_path});
-            } else {
-                try stdout.print("created: {s}\n", .{full_path});
-            }
+        switch (fs.writeFileIfChanged(full_path, tag_output.items, allocator)) {
+            .ok => |was_written| {
+                if (was_written and !quiet) {
+                    if (tag_existed) {
+                        try stdout.print("updated: {s}\n", .{full_path});
+                    } else {
+                        try stdout.print("created: {s}\n", .{full_path});
+                    }
+                }
+            },
+            .err => |e| {
+                std.debug.print("error: cannot write global index file: {s}: {s}\n", .{ full_path, e.context.message });
+            },
         }
 
         if (file_list.items.len > 0) {
@@ -1305,13 +1336,19 @@ pub fn writeGlobalIndexes(
     }
 
     const global_existed = fs.fileExists(global_tag_index_path);
-    try writeFile(global_tag_index_path, output.items);
-    if (!quiet) {
-        if (global_existed) {
-            try stdout.print("updated: {s}\n", .{global_tag_index_path});
-        } else {
-            try stdout.print("created: {s}\n", .{global_tag_index_path});
-        }
+    switch (fs.writeFileIfChanged(global_tag_index_path, output.items, allocator)) {
+        .ok => |was_written| {
+            if (was_written and !quiet) {
+                if (global_existed) {
+                    try stdout.print("updated: {s}\n", .{global_tag_index_path});
+                } else {
+                    try stdout.print("created: {s}\n", .{global_tag_index_path});
+                }
+            }
+        },
+        .err => |e| {
+            std.debug.print("error: cannot write global index: {s}\n", .{e.context.message});
+        },
     }
 }
 
@@ -1358,13 +1395,19 @@ pub fn writeGlobalIndexesAuthoritative(
     defer allocator.free(tag_index_content);
 
     const tag_index_existed = fs.fileExists(global_tag_index_path);
-    try writeFile(global_tag_index_path, tag_index_content);
-    if (!quiet) {
-        if (tag_index_existed) {
-            try stdout.print("updated: {s}\n", .{global_tag_index_path});
-        } else {
-            try stdout.print("created: {s}\n", .{global_tag_index_path});
-        }
+    switch (fs.writeFileIfChanged(global_tag_index_path, tag_index_content, allocator)) {
+        .ok => |was_written| {
+            if (was_written and !quiet) {
+                if (tag_index_existed) {
+                    try stdout.print("updated: {s}\n", .{global_tag_index_path});
+                } else {
+                    try stdout.print("created: {s}\n", .{global_tag_index_path});
+                }
+            }
+        },
+        .err => |e| {
+            std.debug.print("error: cannot write global index: {s}\n", .{e.context.message});
+        },
     }
 
     // Write per-tag index files
@@ -1388,13 +1431,19 @@ pub fn writeGlobalIndexesAuthoritative(
         defer allocator.free(content);
 
         const tag_existed = fs.fileExists(full_path);
-        try writeFile(full_path, content);
-        if (!quiet) {
-            if (tag_existed) {
-                try stdout.print("updated: {s}\n", .{full_path});
-            } else {
-                try stdout.print("created: {s}\n", .{full_path});
-            }
+        switch (fs.writeFileIfChanged(full_path, content, allocator)) {
+            .ok => |was_written| {
+                if (was_written and !quiet) {
+                    if (tag_existed) {
+                        try stdout.print("updated: {s}\n", .{full_path});
+                    } else {
+                        try stdout.print("created: {s}\n", .{full_path});
+                    }
+                }
+            },
+            .err => |e| {
+                std.debug.print("error: cannot write global tag index: {s}\n", .{e.context.message});
+            },
         }
     }
 
@@ -1417,13 +1466,19 @@ pub fn writeGlobalIndexesAuthoritative(
             defer allocator.free(empty);
 
             const tag_existed = fs.fileExists(full_path);
-            try writeFile(full_path, empty);
-            if (!quiet) {
-                if (tag_existed) {
-                    try stdout.print("updated: {s}\n", .{full_path});
-                } else {
-                    try stdout.print("created: {s}\n", .{full_path});
-                }
+            switch (fs.writeFileIfChanged(full_path, empty, allocator)) {
+                .ok => |was_written| {
+                    if (was_written and !quiet) {
+                        if (tag_existed) {
+                            try stdout.print("updated: {s}\n", .{full_path});
+                        } else {
+                            try stdout.print("created: {s}\n", .{full_path});
+                        }
+                    }
+                },
+                .err => |e| {
+                    std.debug.print("error: cannot write global tag index: {s}\n", .{e.context.message});
+                },
             }
         }
     }
@@ -1520,7 +1575,12 @@ pub fn pruneLocalTagIndexes(
         if (std.fs.path.dirname(full_path)) |parent| {
             std.fs.cwd().makePath(parent) catch {};
         }
-        try writeFile(full_path, content_out);
+        switch (fs.writeFileIfChanged(full_path, content_out, allocator)) {
+            .ok => {},
+            .err => |e| {
+                std.debug.print("error: cannot write tag index: {s}\n", .{e.context.message});
+            },
+        }
 
         if (kept_files.items.len > 0) {
             try kept_tags.append(allocator, tag);
@@ -1535,7 +1595,12 @@ pub fn pruneLocalTagIndexes(
 
     const tag_index_content = try renderTagIndexFromTags(allocator, kept_tags.items);
     defer allocator.free(tag_index_content);
-    try writeFile(tag_index_path, tag_index_content);
+    switch (fs.writeFileIfChanged(tag_index_path, tag_index_content, allocator)) {
+        .ok => {},
+        .err => |e| {
+            std.debug.print("error: cannot write tag index: {s}\n", .{e.context.message});
+        },
+    }
 
     return result;
 }
@@ -1618,7 +1683,12 @@ pub fn pruneGlobalTagIndexes(
         if (std.fs.path.dirname(full_path)) |parent| {
             std.fs.cwd().makePath(parent) catch {};
         }
-        try writeFile(full_path, content_out);
+        switch (fs.writeFileIfChanged(full_path, content_out, allocator)) {
+            .ok => {},
+            .err => |e| {
+                std.debug.print("error: cannot write global tag index: {s}\n", .{e.context.message});
+            },
+        }
 
         if (kept_files.items.len > 0) {
             try kept_tags.append(allocator, tag);
@@ -1633,7 +1703,12 @@ pub fn pruneGlobalTagIndexes(
 
     const tag_index_content = try renderTagIndexFromTags(allocator, kept_tags.items);
     defer allocator.free(tag_index_content);
-    try writeFile(tag_index_path, tag_index_content);
+    switch (fs.writeFileIfChanged(tag_index_path, tag_index_content, allocator)) {
+        .ok => {},
+        .err => |e| {
+            std.debug.print("error: cannot write global tag index: {s}\n", .{e.context.message});
+        },
+    }
 
     return result;
 }

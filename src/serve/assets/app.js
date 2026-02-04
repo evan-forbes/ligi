@@ -415,9 +415,11 @@
 
     function findCalendarPath() {
         if (fileList.length === 0) return null;
+        if (fileList.includes('calendar/index.md')) return 'calendar/index.md';
         if (fileList.includes('calendar.md')) return 'calendar.md';
-        const inSubdir = fileList.find(path => path.endsWith('/calendar.md'));
-        return inSubdir || null;
+        const inSubdir = fileList.find(path => path.endsWith('/calendar/index.md'));
+        const legacySubdir = fileList.find(path => path.endsWith('/calendar.md'));
+        return inSubdir || legacySubdir || null;
     }
 
     // Initialize

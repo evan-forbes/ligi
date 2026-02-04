@@ -3,8 +3,6 @@ item = { type = "string" }
 date_long = { type = "string" }
 day_tag = { type = "string" }
 week_tag = { type = "string" }
-month_tag = { type = "string" }
-quarter_tag = { type = "string" }
 ```
 
 ```@remove
@@ -17,7 +15,7 @@ quarter_tag = { type = "string" }
 
 Date: {{ date_long }}
 
-[[t/planning]] [[t/chore]] [[t/{{ day_tag }}]] [[t/{{ week_tag }}]] [[t/{{ month_tag }}]] [[t/{{ quarter_tag }}]]
+[[t/planning]] [[t/chore]] [[t/{{ day_tag }}]] [[t/{{ week_tag }}]]
 
 ## Steps
 -

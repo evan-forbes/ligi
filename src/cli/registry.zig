@@ -80,25 +80,57 @@ pub const COMMANDS = [_]CommandDef{
     .{
         .canonical = "init",
         .names = &.{"init"},
-        .description = "Initialize ligi in current directory or globally",
+        .description = "Initialize ligi workspace (repo, org, or global)",
         .long_description =
-        \\Initialize ligi directory structure.
+        \\Initialize ligi workspace with three-tier hierarchy support.
         \\
-        \\Creates art/ directory with index/, template/, config/, and archive/
-        \\subdirectories. Also creates initial ligi_tags.md index file.
+        \\Workspace types:
+        \\  (default)   Repository workspace - inherits templates from org/global
+        \\  --org       Organization workspace - contains multiple repos
+        \\  --global    Global workspace (~/.ligi) - includes all default templates
         \\
-        \\Use --global to initialize ~/.ligi/ for global artifacts.
+        \\Template inheritance: repo -> org -> global -> builtin
+        \\
+        \\Usage:
+        \\  ligi init              Init repo workspace (auto-registers with parent org)
+        \\  ligi init --org        Init organization workspace
+        \\  ligi init --global     Init global workspace with all templates
+        \\  ligi init --with-templates  Copy templates locally instead of inheriting
+        \\  ligi init --no-register     Don't register with parent org
         ,
     },
     .{
         .canonical = "index",
         .names = &.{ "index", "i" },
         .description = "Index tags and links in documents",
+        .long_description =
+        \\Index tags and wiki-links in markdown files.
+        \\
+        \\Creates local and global tag indexes from [[t/tag]] patterns.
+        \\Fills in tag links to point to index files.
+        \\Automatically detects the nearest art/ directory via workspace detection.
+        \\
+        \\Usage:
+        \\  ligi index              Index current workspace
+        \\  ligi index --global     Rebuild global indexes from all registered repos
+        \\  ligi index -f <file>    Index single file
+        \\  ligi index -f <file> -t <tags>  Add tags to file then index
+        ,
     },
     .{
         .canonical = "query",
         .names = &.{ "query", "q" },
         .description = "Query documents by tags or links",
+        .long_description =
+        \\Query documents by tags with AND/OR operators.
+        \\Automatically detects the nearest art/ directory via workspace detection.
+        \\
+        \\Usage:
+        \\  ligi q t <tag>              Query single tag
+        \\  ligi q t <tag> --global     Query across all registered repos
+        \\  ligi q t tag1 \\& tag2      AND query
+        \\  ligi q t tag1 \\| tag2      OR query
+        ,
     },
     .{
         .canonical = "archive",
@@ -146,7 +178,7 @@ pub const COMMANDS = [_]CommandDef{
         .names = &.{ "plan", "p" },
         .description = "Create planning docs and update the calendar",
         .long_description =
-        \\Create planning docs from templates and update art/calendar.md.
+        \\Create planning docs from templates and update art/calendar/index.md.
         \\
         \\Usage:
         \\  ligi p day [-d YYYY-MM-DD]
@@ -235,6 +267,24 @@ pub const COMMANDS = [_]CommandDef{
         ,
     },
     .{
+        .canonical = "workspace",
+        .names = &.{ "workspace", "ws" },
+        .description = "Display workspace hierarchy info",
+        .long_description =
+        \\Display workspace hierarchy info and manage workspaces.
+        \\
+        \\Subcommands:
+        \\  info, i      Show current workspace context (default)
+        \\  list, ls     List repos in org (if in org/repo workspace)
+        \\  templates, t Show template resolution paths
+        \\
+        \\Usage:
+        \\  ligi ws              Show workspace info
+        \\  ligi ws list         List org repos
+        \\  ligi ws templates    Show template paths
+        ,
+    },
+    .{
         .canonical = "github",
         .names = &.{ "github", "gh" },
         .description = "Pull GitHub issues and PRs as local documents",
@@ -288,10 +338,13 @@ const GlobalParams = clap.parseParamsComptime(
 
 /// Init command options
 const InitParams = clap.parseParamsComptime(
-    \\-h, --help         Show this help message
-    \\-g, --global       Initialize global ~/.ligi instead of local ./art
-    \\-r, --root <str>   Override target directory
-    \\-q, --quiet        Suppress non-error output
+    \\-h, --help            Show this help message
+    \\-g, --global          Initialize global ~/.ligi workspace
+    \\-o, --org             Initialize as organization workspace
+    \\-r, --root <str>      Override target directory
+    \\--with-templates      Copy templates locally (default: only for --global)
+    \\--no-register         Do not register with parent org
+    \\-q, --quiet           Suppress non-error output
     \\
 );
 
@@ -326,8 +379,9 @@ const PlanParams = clap.parseParamsComptime(
     \\-h, --help           Show this help message
     \\-d, --date <str>     Date for plan tags (YYYY-MM-DD or YY-MM-DD, default: today)
     \\-l, --length <str>   Template length: long|short (default: long)
-    \\-i, --inbox          Place output in art/inbox
-    \\--no-inbox           Place output outside inbox
+    \\-i, --inbox          Place item output in art/inbox
+    \\--no-inbox           Place item output outside inbox
+    \\-D, --dir            Create a directory with plan.md
     \\<str>...
     \\
 );
@@ -335,10 +389,11 @@ const PlanParams = clap.parseParamsComptime(
 /// Index command options
 const IndexParams = clap.parseParamsComptime(
     \\-h, --help         Show this help message
-    \\-r, --root <str>   Repository root directory
+    \\-r, --root <str>   Override art/ root directory
     \\-f, --file <str>   Index single file only
     \\-t, --tags <str>   Add tags to file frontmatter (comma-separated, requires --file)
     \\-g, --global       Rebuild global tag indexes from all repos
+    \\-o, --org          (deprecated) No-op, workspace detection is automatic
     \\--no-local         Do not update local tag indexes (with --global)
     \\-q, --quiet        Suppress non-error output
     \\
@@ -383,6 +438,13 @@ const VoiceParams = clap.parseParamsComptime(
 const GlobalizeParams = clap.parseParamsComptime(
     \\-h, --help         Show this help message
     \\-f, --force        Overwrite existing files without prompting
+    \\<str>...
+    \\
+);
+
+/// Workspace command options
+const WorkspaceParams = clap.parseParamsComptime(
+    \\-h, --help             Show this help message
     \\<str>...
     \\
 );
@@ -488,6 +550,8 @@ pub fn run(
         return runLspCommand(allocator, remaining_args, stdout, stderr);
     } else if (std.mem.eql(u8, cmd.canonical, "globalize")) {
         return runGlobalizeCommand(allocator, remaining_args, stdout, stderr);
+    } else if (std.mem.eql(u8, cmd.canonical, "workspace")) {
+        return runWorkspaceCommand(allocator, remaining_args, stdout, stderr);
     } else if (std.mem.eql(u8, cmd.canonical, "github")) {
         return runGithubCommand(allocator, remaining_args, global_args.quiet != 0, stdout, stderr);
     }
@@ -525,13 +589,27 @@ fn runInitCommand(
         return 0;
     }
 
+    // Validate mutually exclusive flags
+    if (res.args.global != 0 and res.args.org != 0) {
+        try stderr.writeAll("error: --global and --org are mutually exclusive\n");
+        return 1;
+    }
+
     const init_cmd = @import("commands/init.zig");
     const quiet = (res.args.quiet != 0) or global_quiet;
 
+    // Determine workspace type
+    const workspace_type: core.WorkspaceType = if (res.args.global != 0) .global else if (res.args.org != 0) .org else .repo;
+
+    // Templates are included by default only for global init
+    const with_templates = (res.args.@"with-templates" != 0) or (workspace_type == .global);
+
     return init_cmd.run(
         allocator,
-        res.args.global != 0,
+        workspace_type,
         res.args.root,
+        with_templates,
+        res.args.@"no-register" != 0,
         quiet,
         stdout,
         stderr,
@@ -666,8 +744,9 @@ fn runPlanCommand(
         try stdout.writeAll("\nOptions:\n");
         try stdout.writeAll("  -d, --date <str>     Date for plan tags (YYYY-MM-DD or YY-MM-DD, default: today)\n");
         try stdout.writeAll("  -l, --length <str>   Template length: long|short (default: long)\n");
-        try stdout.writeAll("  -i, --inbox          Place output in art/inbox\n");
-        try stdout.writeAll("  --no-inbox           Place output outside inbox\n");
+        try stdout.writeAll("  -i, --inbox          Place item output in art/inbox\n");
+        try stdout.writeAll("  --no-inbox           Place item output outside inbox\n");
+        try stdout.writeAll("  -D, --dir            Create a directory with plan.md\n");
         return 0;
     }
 
@@ -700,6 +779,7 @@ fn runPlanCommand(
         .date_arg = res.args.date,
         .length = length,
         .inbox = inbox,
+        .dir_mode = res.args.dir != 0,
         .quiet = global_quiet,
     }, stdout, stderr);
 }
@@ -818,6 +898,7 @@ fn runIndexCommand(
         try stdout.writeAll("  -f, --file <path>   Index single file only\n");
         try stdout.writeAll("  -t, --tags <tags>   Add tags to file frontmatter (comma-separated, requires --file)\n");
         try stdout.writeAll("  -g, --global        Rebuild global tag indexes from all repos\n");
+        try stdout.writeAll("  -o, --org           Index all repos in current organization\n");
         try stdout.writeAll("  --no-local          Do not update local tag indexes (with --global)\n");
         try stdout.writeAll("  -q, --quiet         Suppress non-error output\n");
         return 0;
@@ -832,6 +913,7 @@ fn runIndexCommand(
         res.args.file,
         res.args.tags,
         res.args.global != 0,
+        res.args.org != 0,
         res.args.@"no-local" != 0,
         quiet,
         stdout,
@@ -961,6 +1043,45 @@ fn runGlobalizeCommand(
         allocator,
         positionals,
         res.args.force != 0,
+        stdout,
+        stderr,
+    );
+}
+
+/// Run the workspace command with clap parsing
+fn runWorkspaceCommand(
+    allocator: std.mem.Allocator,
+    args: []const []const u8,
+    stdout: anytype,
+    stderr: anytype,
+) !u8 {
+    var diag: clap.Diagnostic = .{};
+    var iter = clap.args.SliceIterator{ .args = args };
+
+    var res = clap.parseEx(clap.Help, &WorkspaceParams, clap.parsers.default, &iter, .{
+        .diagnostic = &diag,
+        .allocator = allocator,
+    }) catch |err| {
+        try diag.report(stderr, err);
+        return 1;
+    };
+    defer res.deinit();
+
+    // Handle --help for workspace
+    if (res.args.help != 0) {
+        const registry = buildRegistry();
+        if (registry.findCommand("workspace")) |cmd| {
+            try registry.printCommandHelp(cmd, stdout);
+        }
+        return 0;
+    }
+
+    const workspace_cmd = @import("commands/workspace.zig");
+    const positionals = res.positionals[0];
+
+    return workspace_cmd.run(
+        allocator,
+        positionals,
         stdout,
         stderr,
     );

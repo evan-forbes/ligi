@@ -83,6 +83,29 @@ pub fn readFile(allocator: std.mem.Allocator, path: []const u8) errors.Result([]
     return .{ .ok = content };
 }
 
+/// Write content to a file only if it differs from existing content.
+/// Returns true if the file was written, false if skipped (content identical).
+pub fn writeFileIfChanged(path: []const u8, content: []const u8, allocator: std.mem.Allocator) errors.Result(bool) {
+    // Read existing content
+    switch (readFile(allocator, path)) {
+        .ok => |existing| {
+            defer allocator.free(existing);
+            if (std.mem.eql(u8, existing, content)) {
+                return .{ .ok = false }; // Content unchanged, skip write
+            }
+        },
+        .err => {
+            // File doesn't exist or can't be read, proceed with write
+        },
+    }
+
+    // Content differs or file is new - write it
+    switch (writeFile(path, content)) {
+        .ok => return .{ .ok = true },
+        .err => |e| return .{ .err = e },
+    }
+}
+
 /// Write content to a file, overwriting if it exists.
 pub fn writeFile(path: []const u8, content: []const u8) errors.Result(void) {
     const file = std.fs.cwd().createFile(path, .{}) catch {

@@ -127,7 +127,7 @@ pub const INITIAL_LIGI_TAGS_DOC =
     \\
 ;
 
-/// Initial content for art/calendar.md
+/// Initial content for art/calendar/index.md
 pub const INITIAL_CALENDAR_DOC =
     \\# Calendar
     \\
@@ -136,10 +136,6 @@ pub const INITIAL_CALENDAR_DOC =
     \\## Days
     \\
     \\## Weeks
-    \\
-    \\## Months
-    \\
-    \\## Quarters
     \\
 ;
 
@@ -721,8 +717,6 @@ pub const INITIAL_PLAN_DAY_TEMPLATE =
     \\date_long = { type = "string" }
     \\day_tag = { type = "string" }
     \\week_tag = { type = "string" }
-    \\month_tag = { type = "string" }
-    \\quarter_tag = { type = "string" }
     \\prev_day_tag = { type = "string" }
     \\prev_week_tag = { type = "string" }
     \\```
@@ -735,7 +729,7 @@ pub const INITIAL_PLAN_DAY_TEMPLATE =
     \\
     \\# Daily Plan - {{ date_long }}
     \\
-    \\[[t/planning]] [[t/{{ day_tag }}]] [[t/{{ week_tag }}]] [[t/{{ month_tag }}]] [[t/{{ quarter_tag }}]]
+    \\[[t/planning]] [[t/{{ day_tag }}]] [[t/{{ week_tag }}]]
     \\
     \\## Review (required)
     \\- Review yesterday: [[t/{{ prev_day_tag }}]]
@@ -757,9 +751,8 @@ pub const INITIAL_PLAN_DAY_TEMPLATE =
 pub const INITIAL_PLAN_WEEK_TEMPLATE =
     \\```toml
     \\week = { type = "string" }
+    \\day_tag = { type = "string" }
     \\week_tag = { type = "string" }
-    \\month_tag = { type = "string" }
-    \\quarter_tag = { type = "string" }
     \\prev_week_tag = { type = "string" }
     \\```
     \\
@@ -771,7 +764,7 @@ pub const INITIAL_PLAN_WEEK_TEMPLATE =
     \\
     \\# Weekly Plan - {{ week }}
     \\
-    \\[[t/planning]] [[t/{{ week_tag }}]] [[t/{{ month_tag }}]] [[t/{{ quarter_tag }}]]
+    \\[[t/planning]] [[t/{{ day_tag }}]] [[t/{{ week_tag }}]]
     \\
     \\## Review (required)
     \\- Review last week: [[t/{{ prev_week_tag }}]]
@@ -793,9 +786,8 @@ pub const INITIAL_PLAN_WEEK_TEMPLATE =
 pub const INITIAL_PLAN_MONTH_TEMPLATE =
     \\```toml
     \\month = { type = "string" }
-    \\month_tag = { type = "string" }
-    \\quarter_tag = { type = "string" }
-    \\prev_month_tag = { type = "string" }
+    \\day_tag = { type = "string" }
+    \\week_tag = { type = "string" }
     \\```
     \\
     \\```@remove
@@ -806,10 +798,9 @@ pub const INITIAL_PLAN_MONTH_TEMPLATE =
     \\
     \\# Monthly Plan - {{ month }}
     \\
-    \\[[t/planning]] [[t/{{ month_tag }}]] [[t/{{ quarter_tag }}]]
+    \\[[t/planning]] [[t/{{ day_tag }}]] [[t/{{ week_tag }}]]
     \\
     \\## Review (required)
-    \\- Review last month: [[t/{{ prev_month_tag }}]]
     \\- Review open work: `ligi q t TODO | planning`
     \\
     \\## Goals
@@ -827,8 +818,8 @@ pub const INITIAL_PLAN_MONTH_TEMPLATE =
 pub const INITIAL_PLAN_QUARTER_TEMPLATE =
     \\```toml
     \\quarter = { type = "string" }
-    \\quarter_tag = { type = "string" }
-    \\prev_quarter_tag = { type = "string" }
+    \\day_tag = { type = "string" }
+    \\week_tag = { type = "string" }
     \\```
     \\
     \\```@remove
@@ -839,10 +830,9 @@ pub const INITIAL_PLAN_QUARTER_TEMPLATE =
     \\
     \\# Quarterly Plan - {{ quarter }}
     \\
-    \\[[t/planning]] [[t/{{ quarter_tag }}]]
+    \\[[t/planning]] [[t/{{ day_tag }}]] [[t/{{ week_tag }}]]
     \\
     \\## Review (required)
-    \\- Review last quarter: [[t/{{ prev_quarter_tag }}]]
     \\- Review open work: `ligi q t TODO | planning`
     \\
     \\## Themes
@@ -862,8 +852,6 @@ pub const INITIAL_PLAN_DAY_SHORT_TEMPLATE =
     \\date_long = { type = "string" }
     \\day_tag = { type = "string" }
     \\week_tag = { type = "string" }
-    \\month_tag = { type = "string" }
-    \\quarter_tag = { type = "string" }
     \\prev_day_tag = { type = "string" }
     \\```
     \\
@@ -875,7 +863,7 @@ pub const INITIAL_PLAN_DAY_SHORT_TEMPLATE =
     \\
     \\# Daily Plan - {{ date_long }}
     \\
-    \\[[t/planning]] [[t/{{ day_tag }}]] [[t/{{ week_tag }}]] [[t/{{ month_tag }}]] [[t/{{ quarter_tag }}]]
+    \\[[t/planning]] [[t/{{ day_tag }}]] [[t/{{ week_tag }}]]
     \\
     \\## Review
     \\- Yesterday: [[t/{{ prev_day_tag }}]]
@@ -893,9 +881,8 @@ pub const INITIAL_PLAN_DAY_SHORT_TEMPLATE =
 pub const INITIAL_PLAN_WEEK_SHORT_TEMPLATE =
     \\```toml
     \\week = { type = "string" }
+    \\day_tag = { type = "string" }
     \\week_tag = { type = "string" }
-    \\month_tag = { type = "string" }
-    \\quarter_tag = { type = "string" }
     \\prev_week_tag = { type = "string" }
     \\```
     \\
@@ -907,7 +894,7 @@ pub const INITIAL_PLAN_WEEK_SHORT_TEMPLATE =
     \\
     \\# Weekly Plan - {{ week }}
     \\
-    \\[[t/planning]] [[t/{{ week_tag }}]] [[t/{{ month_tag }}]] [[t/{{ quarter_tag }}]]
+    \\[[t/planning]] [[t/{{ day_tag }}]] [[t/{{ week_tag }}]]
     \\
     \\## Review
     \\- Last week: [[t/{{ prev_week_tag }}]]
@@ -924,9 +911,8 @@ pub const INITIAL_PLAN_WEEK_SHORT_TEMPLATE =
 pub const INITIAL_PLAN_MONTH_SHORT_TEMPLATE =
     \\```toml
     \\month = { type = "string" }
-    \\month_tag = { type = "string" }
-    \\quarter_tag = { type = "string" }
-    \\prev_month_tag = { type = "string" }
+    \\day_tag = { type = "string" }
+    \\week_tag = { type = "string" }
     \\```
     \\
     \\```@remove
@@ -937,10 +923,9 @@ pub const INITIAL_PLAN_MONTH_SHORT_TEMPLATE =
     \\
     \\# Monthly Plan - {{ month }}
     \\
-    \\[[t/planning]] [[t/{{ month_tag }}]] [[t/{{ quarter_tag }}]]
+    \\[[t/planning]] [[t/{{ day_tag }}]] [[t/{{ week_tag }}]]
     \\
     \\## Review
-    \\- Last month: [[t/{{ prev_month_tag }}]]
     \\
     \\## Goals
     \\-
@@ -954,8 +939,8 @@ pub const INITIAL_PLAN_MONTH_SHORT_TEMPLATE =
 pub const INITIAL_PLAN_QUARTER_SHORT_TEMPLATE =
     \\```toml
     \\quarter = { type = "string" }
-    \\quarter_tag = { type = "string" }
-    \\prev_quarter_tag = { type = "string" }
+    \\day_tag = { type = "string" }
+    \\week_tag = { type = "string" }
     \\```
     \\
     \\```@remove
@@ -966,10 +951,9 @@ pub const INITIAL_PLAN_QUARTER_SHORT_TEMPLATE =
     \\
     \\# Quarterly Plan - {{ quarter }}
     \\
-    \\[[t/planning]] [[t/{{ quarter_tag }}]]
+    \\[[t/planning]] [[t/{{ day_tag }}]] [[t/{{ week_tag }}]]
     \\
     \\## Review
-    \\- Last quarter: [[t/{{ prev_quarter_tag }}]]
     \\
     \\## Themes
     \\-
@@ -986,8 +970,6 @@ pub const INITIAL_PLAN_FEATURE_TEMPLATE =
     \\date_long = { type = "string" }
     \\day_tag = { type = "string" }
     \\week_tag = { type = "string" }
-    \\month_tag = { type = "string" }
-    \\quarter_tag = { type = "string" }
     \\```
     \\
     \\```@remove
@@ -1000,7 +982,7 @@ pub const INITIAL_PLAN_FEATURE_TEMPLATE =
     \\
     \\Date: {{ date_long }}
     \\
-    \\[[t/planning]] [[t/feature]] [[t/{{ day_tag }}]] [[t/{{ week_tag }}]] [[t/{{ month_tag }}]] [[t/{{ quarter_tag }}]]
+    \\[[t/planning]] [[t/feature]] [[t/{{ day_tag }}]] [[t/{{ week_tag }}]]
     \\
     \\## Summary
     \\-
@@ -1036,8 +1018,6 @@ pub const INITIAL_PLAN_FEATURE_SHORT_TEMPLATE =
     \\date_long = { type = "string" }
     \\day_tag = { type = "string" }
     \\week_tag = { type = "string" }
-    \\month_tag = { type = "string" }
-    \\quarter_tag = { type = "string" }
     \\```
     \\
     \\```@remove
@@ -1050,7 +1030,7 @@ pub const INITIAL_PLAN_FEATURE_SHORT_TEMPLATE =
     \\
     \\Date: {{ date_long }}
     \\
-    \\[[t/planning]] [[t/feature]] [[t/{{ day_tag }}]] [[t/{{ week_tag }}]] [[t/{{ month_tag }}]] [[t/{{ quarter_tag }}]]
+    \\[[t/planning]] [[t/feature]] [[t/{{ day_tag }}]] [[t/{{ week_tag }}]]
     \\
     \\## Goal
     \\-
@@ -1070,8 +1050,6 @@ pub const INITIAL_PLAN_CHORE_TEMPLATE =
     \\date_long = { type = "string" }
     \\day_tag = { type = "string" }
     \\week_tag = { type = "string" }
-    \\month_tag = { type = "string" }
-    \\quarter_tag = { type = "string" }
     \\```
     \\
     \\```@remove
@@ -1084,7 +1062,7 @@ pub const INITIAL_PLAN_CHORE_TEMPLATE =
     \\
     \\Date: {{ date_long }}
     \\
-    \\[[t/planning]] [[t/chore]] [[t/{{ day_tag }}]] [[t/{{ week_tag }}]] [[t/{{ month_tag }}]] [[t/{{ quarter_tag }}]]
+    \\[[t/planning]] [[t/chore]] [[t/{{ day_tag }}]] [[t/{{ week_tag }}]]
     \\
     \\## Purpose
     \\-
@@ -1110,8 +1088,6 @@ pub const INITIAL_PLAN_CHORE_SHORT_TEMPLATE =
     \\date_long = { type = "string" }
     \\day_tag = { type = "string" }
     \\week_tag = { type = "string" }
-    \\month_tag = { type = "string" }
-    \\quarter_tag = { type = "string" }
     \\```
     \\
     \\```@remove
@@ -1124,7 +1100,7 @@ pub const INITIAL_PLAN_CHORE_SHORT_TEMPLATE =
     \\
     \\Date: {{ date_long }}
     \\
-    \\[[t/planning]] [[t/chore]] [[t/{{ day_tag }}]] [[t/{{ week_tag }}]] [[t/{{ month_tag }}]] [[t/{{ quarter_tag }}]]
+    \\[[t/planning]] [[t/chore]] [[t/{{ day_tag }}]] [[t/{{ week_tag }}]]
     \\
     \\## Steps
     \\-
@@ -1141,8 +1117,6 @@ pub const INITIAL_PLAN_REFACTOR_TEMPLATE =
     \\date_long = { type = "string" }
     \\day_tag = { type = "string" }
     \\week_tag = { type = "string" }
-    \\month_tag = { type = "string" }
-    \\quarter_tag = { type = "string" }
     \\```
     \\
     \\```@remove
@@ -1155,7 +1129,7 @@ pub const INITIAL_PLAN_REFACTOR_TEMPLATE =
     \\
     \\Date: {{ date_long }}
     \\
-    \\[[t/planning]] [[t/refactor]] [[t/{{ day_tag }}]] [[t/{{ week_tag }}]] [[t/{{ month_tag }}]] [[t/{{ quarter_tag }}]]
+    \\[[t/planning]] [[t/refactor]] [[t/{{ day_tag }}]] [[t/{{ week_tag }}]]
     \\
     \\## Motivation
     \\-
@@ -1184,8 +1158,6 @@ pub const INITIAL_PLAN_REFACTOR_SHORT_TEMPLATE =
     \\date_long = { type = "string" }
     \\day_tag = { type = "string" }
     \\week_tag = { type = "string" }
-    \\month_tag = { type = "string" }
-    \\quarter_tag = { type = "string" }
     \\```
     \\
     \\```@remove
@@ -1198,7 +1170,7 @@ pub const INITIAL_PLAN_REFACTOR_SHORT_TEMPLATE =
     \\
     \\Date: {{ date_long }}
     \\
-    \\[[t/planning]] [[t/refactor]] [[t/{{ day_tag }}]] [[t/{{ week_tag }}]] [[t/{{ month_tag }}]] [[t/{{ quarter_tag }}]]
+    \\[[t/planning]] [[t/refactor]] [[t/{{ day_tag }}]] [[t/{{ week_tag }}]]
     \\
     \\## Strategy
     \\-
@@ -1215,8 +1187,6 @@ pub const INITIAL_PLAN_PERF_TEMPLATE =
     \\date_long = { type = "string" }
     \\day_tag = { type = "string" }
     \\week_tag = { type = "string" }
-    \\month_tag = { type = "string" }
-    \\quarter_tag = { type = "string" }
     \\```
     \\
     \\```@remove
@@ -1229,7 +1199,7 @@ pub const INITIAL_PLAN_PERF_TEMPLATE =
     \\
     \\Date: {{ date_long }}
     \\
-    \\[[t/planning]] [[t/perf]] [[t/{{ day_tag }}]] [[t/{{ week_tag }}]] [[t/{{ month_tag }}]] [[t/{{ quarter_tag }}]]
+    \\[[t/planning]] [[t/perf]] [[t/{{ day_tag }}]] [[t/{{ week_tag }}]]
     \\
     \\## Baseline
     \\-
@@ -1258,8 +1228,6 @@ pub const INITIAL_PLAN_PERF_SHORT_TEMPLATE =
     \\date_long = { type = "string" }
     \\day_tag = { type = "string" }
     \\week_tag = { type = "string" }
-    \\month_tag = { type = "string" }
-    \\quarter_tag = { type = "string" }
     \\```
     \\
     \\```@remove
@@ -1272,7 +1240,7 @@ pub const INITIAL_PLAN_PERF_SHORT_TEMPLATE =
     \\
     \\Date: {{ date_long }}
     \\
-    \\[[t/planning]] [[t/perf]] [[t/{{ day_tag }}]] [[t/{{ week_tag }}]] [[t/{{ month_tag }}]] [[t/{{ quarter_tag }}]]
+    \\[[t/planning]] [[t/perf]] [[t/{{ day_tag }}]] [[t/{{ week_tag }}]]
     \\
     \\## Target
     \\-
@@ -1322,8 +1290,10 @@ pub const InitResult = struct {
 /// Run the init command
 pub fn run(
     allocator: std.mem.Allocator,
-    global: bool,
+    workspace_type: config.WorkspaceType,
     root_override: ?[]const u8,
+    with_templates: bool,
+    no_register: bool,
     quiet: bool,
     stdout: anytype,
     stderr: anytype,
@@ -1338,7 +1308,7 @@ pub fn run(
 
     if (root_override) |r| {
         base_path = r;
-    } else if (global) {
+    } else if (workspace_type == .global) {
         switch (paths.getGlobalRoot(allocator)) {
             .ok => |p| {
                 base_path = p;
@@ -1390,7 +1360,7 @@ pub fn run(
     defer allocator.free(tags_doc_path);
     try createFileTracked(allocator, tags_doc_path, INITIAL_LIGI_TAGS_DOC, &result);
 
-    const calendar_path = try paths.joinPath(allocator, &.{ art_path, "calendar.md" });
+    const calendar_path = try paths.joinPath(allocator, &.{ art_path, "calendar", "index.md" });
     defer allocator.free(calendar_path);
     try createFileTracked(allocator, calendar_path, INITIAL_CALENDAR_DOC, &result);
 
@@ -1431,92 +1401,94 @@ pub fn run(
     defer allocator.free(extensions_index_path);
     try createFileTracked(allocator, extensions_index_path, INITIAL_EXTENSIONS_INDEX, &result);
 
-    // 9. Template files in art/template/
-    const template_path = try paths.joinPath(allocator, &.{ art_path, "template" });
-    defer allocator.free(template_path);
+    // 9. Template files in art/template/ (only if with_templates flag is set)
+    if (with_templates) {
+        const template_path = try paths.joinPath(allocator, &.{ art_path, "template" });
+        defer allocator.free(template_path);
 
-    const extension_template_path = try paths.joinPath(allocator, &.{ template_path, "extension.md" });
-    defer allocator.free(extension_template_path);
-    try createFileTracked(allocator, extension_template_path, INITIAL_EXTENSION_TEMPLATE, &result);
+        const extension_template_path = try paths.joinPath(allocator, &.{ template_path, "extension.md" });
+        defer allocator.free(extension_template_path);
+        try createFileTracked(allocator, extension_template_path, INITIAL_EXTENSION_TEMPLATE, &result);
 
-    const impl_plan_path = try paths.joinPath(allocator, &.{ template_path, "impl_plan.md" });
-    defer allocator.free(impl_plan_path);
-    try createFileTracked(allocator, impl_plan_path, INITIAL_IMPL_PLAN_TEMPLATE, &result);
+        const impl_plan_path = try paths.joinPath(allocator, &.{ template_path, "impl_plan.md" });
+        defer allocator.free(impl_plan_path);
+        try createFileTracked(allocator, impl_plan_path, INITIAL_IMPL_PLAN_TEMPLATE, &result);
 
-    const impl_short_plan_path = try paths.joinPath(allocator, &.{ template_path, "impl_short_plan.md" });
-    defer allocator.free(impl_short_plan_path);
-    try createFileTracked(allocator, impl_short_plan_path, INITIAL_IMPL_SHORT_PLAN_TEMPLATE, &result);
+        const impl_short_plan_path = try paths.joinPath(allocator, &.{ template_path, "impl_short_plan.md" });
+        defer allocator.free(impl_short_plan_path);
+        try createFileTracked(allocator, impl_short_plan_path, INITIAL_IMPL_SHORT_PLAN_TEMPLATE, &result);
 
-    const plan_day_path = try paths.joinPath(allocator, &.{ template_path, "plan_day.md" });
-    defer allocator.free(plan_day_path);
-    try createFileTracked(allocator, plan_day_path, INITIAL_PLAN_DAY_TEMPLATE, &result);
+        const plan_day_path = try paths.joinPath(allocator, &.{ template_path, "plan_day.md" });
+        defer allocator.free(plan_day_path);
+        try createFileTracked(allocator, plan_day_path, INITIAL_PLAN_DAY_TEMPLATE, &result);
 
-    const plan_week_path = try paths.joinPath(allocator, &.{ template_path, "plan_week.md" });
-    defer allocator.free(plan_week_path);
-    try createFileTracked(allocator, plan_week_path, INITIAL_PLAN_WEEK_TEMPLATE, &result);
+        const plan_week_path = try paths.joinPath(allocator, &.{ template_path, "plan_week.md" });
+        defer allocator.free(plan_week_path);
+        try createFileTracked(allocator, plan_week_path, INITIAL_PLAN_WEEK_TEMPLATE, &result);
 
-    const plan_month_path = try paths.joinPath(allocator, &.{ template_path, "plan_month.md" });
-    defer allocator.free(plan_month_path);
-    try createFileTracked(allocator, plan_month_path, INITIAL_PLAN_MONTH_TEMPLATE, &result);
+        const plan_month_path = try paths.joinPath(allocator, &.{ template_path, "plan_month.md" });
+        defer allocator.free(plan_month_path);
+        try createFileTracked(allocator, plan_month_path, INITIAL_PLAN_MONTH_TEMPLATE, &result);
 
-    const plan_quarter_path = try paths.joinPath(allocator, &.{ template_path, "plan_quarter.md" });
-    defer allocator.free(plan_quarter_path);
-    try createFileTracked(allocator, plan_quarter_path, INITIAL_PLAN_QUARTER_TEMPLATE, &result);
+        const plan_quarter_path = try paths.joinPath(allocator, &.{ template_path, "plan_quarter.md" });
+        defer allocator.free(plan_quarter_path);
+        try createFileTracked(allocator, plan_quarter_path, INITIAL_PLAN_QUARTER_TEMPLATE, &result);
 
-    const plan_day_short_path = try paths.joinPath(allocator, &.{ template_path, "plan_day_short.md" });
-    defer allocator.free(plan_day_short_path);
-    try createFileTracked(allocator, plan_day_short_path, INITIAL_PLAN_DAY_SHORT_TEMPLATE, &result);
+        const plan_day_short_path = try paths.joinPath(allocator, &.{ template_path, "plan_day_short.md" });
+        defer allocator.free(plan_day_short_path);
+        try createFileTracked(allocator, plan_day_short_path, INITIAL_PLAN_DAY_SHORT_TEMPLATE, &result);
 
-    const plan_week_short_path = try paths.joinPath(allocator, &.{ template_path, "plan_week_short.md" });
-    defer allocator.free(plan_week_short_path);
-    try createFileTracked(allocator, plan_week_short_path, INITIAL_PLAN_WEEK_SHORT_TEMPLATE, &result);
+        const plan_week_short_path = try paths.joinPath(allocator, &.{ template_path, "plan_week_short.md" });
+        defer allocator.free(plan_week_short_path);
+        try createFileTracked(allocator, plan_week_short_path, INITIAL_PLAN_WEEK_SHORT_TEMPLATE, &result);
 
-    const plan_month_short_path = try paths.joinPath(allocator, &.{ template_path, "plan_month_short.md" });
-    defer allocator.free(plan_month_short_path);
-    try createFileTracked(allocator, plan_month_short_path, INITIAL_PLAN_MONTH_SHORT_TEMPLATE, &result);
+        const plan_month_short_path = try paths.joinPath(allocator, &.{ template_path, "plan_month_short.md" });
+        defer allocator.free(plan_month_short_path);
+        try createFileTracked(allocator, plan_month_short_path, INITIAL_PLAN_MONTH_SHORT_TEMPLATE, &result);
 
-    const plan_quarter_short_path = try paths.joinPath(allocator, &.{ template_path, "plan_quarter_short.md" });
-    defer allocator.free(plan_quarter_short_path);
-    try createFileTracked(allocator, plan_quarter_short_path, INITIAL_PLAN_QUARTER_SHORT_TEMPLATE, &result);
+        const plan_quarter_short_path = try paths.joinPath(allocator, &.{ template_path, "plan_quarter_short.md" });
+        defer allocator.free(plan_quarter_short_path);
+        try createFileTracked(allocator, plan_quarter_short_path, INITIAL_PLAN_QUARTER_SHORT_TEMPLATE, &result);
 
-    const plan_feature_path = try paths.joinPath(allocator, &.{ template_path, "plan_feature.md" });
-    defer allocator.free(plan_feature_path);
-    try createFileTracked(allocator, plan_feature_path, INITIAL_PLAN_FEATURE_TEMPLATE, &result);
+        const plan_feature_path = try paths.joinPath(allocator, &.{ template_path, "plan_feature.md" });
+        defer allocator.free(plan_feature_path);
+        try createFileTracked(allocator, plan_feature_path, INITIAL_PLAN_FEATURE_TEMPLATE, &result);
 
-    const plan_feature_short_path = try paths.joinPath(allocator, &.{ template_path, "plan_feature_short.md" });
-    defer allocator.free(plan_feature_short_path);
-    try createFileTracked(allocator, plan_feature_short_path, INITIAL_PLAN_FEATURE_SHORT_TEMPLATE, &result);
+        const plan_feature_short_path = try paths.joinPath(allocator, &.{ template_path, "plan_feature_short.md" });
+        defer allocator.free(plan_feature_short_path);
+        try createFileTracked(allocator, plan_feature_short_path, INITIAL_PLAN_FEATURE_SHORT_TEMPLATE, &result);
 
-    const plan_chore_path = try paths.joinPath(allocator, &.{ template_path, "plan_chore.md" });
-    defer allocator.free(plan_chore_path);
-    try createFileTracked(allocator, plan_chore_path, INITIAL_PLAN_CHORE_TEMPLATE, &result);
+        const plan_chore_path = try paths.joinPath(allocator, &.{ template_path, "plan_chore.md" });
+        defer allocator.free(plan_chore_path);
+        try createFileTracked(allocator, plan_chore_path, INITIAL_PLAN_CHORE_TEMPLATE, &result);
 
-    const plan_chore_short_path = try paths.joinPath(allocator, &.{ template_path, "plan_chore_short.md" });
-    defer allocator.free(plan_chore_short_path);
-    try createFileTracked(allocator, plan_chore_short_path, INITIAL_PLAN_CHORE_SHORT_TEMPLATE, &result);
+        const plan_chore_short_path = try paths.joinPath(allocator, &.{ template_path, "plan_chore_short.md" });
+        defer allocator.free(plan_chore_short_path);
+        try createFileTracked(allocator, plan_chore_short_path, INITIAL_PLAN_CHORE_SHORT_TEMPLATE, &result);
 
-    const plan_refactor_path = try paths.joinPath(allocator, &.{ template_path, "plan_refactor.md" });
-    defer allocator.free(plan_refactor_path);
-    try createFileTracked(allocator, plan_refactor_path, INITIAL_PLAN_REFACTOR_TEMPLATE, &result);
+        const plan_refactor_path = try paths.joinPath(allocator, &.{ template_path, "plan_refactor.md" });
+        defer allocator.free(plan_refactor_path);
+        try createFileTracked(allocator, plan_refactor_path, INITIAL_PLAN_REFACTOR_TEMPLATE, &result);
 
-    const plan_refactor_short_path = try paths.joinPath(allocator, &.{ template_path, "plan_refactor_short.md" });
-    defer allocator.free(plan_refactor_short_path);
-    try createFileTracked(allocator, plan_refactor_short_path, INITIAL_PLAN_REFACTOR_SHORT_TEMPLATE, &result);
+        const plan_refactor_short_path = try paths.joinPath(allocator, &.{ template_path, "plan_refactor_short.md" });
+        defer allocator.free(plan_refactor_short_path);
+        try createFileTracked(allocator, plan_refactor_short_path, INITIAL_PLAN_REFACTOR_SHORT_TEMPLATE, &result);
 
-    const plan_perf_path = try paths.joinPath(allocator, &.{ template_path, "plan_perf.md" });
-    defer allocator.free(plan_perf_path);
-    try createFileTracked(allocator, plan_perf_path, INITIAL_PLAN_PERF_TEMPLATE, &result);
+        const plan_perf_path = try paths.joinPath(allocator, &.{ template_path, "plan_perf.md" });
+        defer allocator.free(plan_perf_path);
+        try createFileTracked(allocator, plan_perf_path, INITIAL_PLAN_PERF_TEMPLATE, &result);
 
-    const plan_perf_short_path = try paths.joinPath(allocator, &.{ template_path, "plan_perf_short.md" });
-    defer allocator.free(plan_perf_short_path);
-    try createFileTracked(allocator, plan_perf_short_path, INITIAL_PLAN_PERF_SHORT_TEMPLATE, &result);
+        const plan_perf_short_path = try paths.joinPath(allocator, &.{ template_path, "plan_perf_short.md" });
+        defer allocator.free(plan_perf_short_path);
+        try createFileTracked(allocator, plan_perf_short_path, INITIAL_PLAN_PERF_SHORT_TEMPLATE, &result);
+    }
 
-    // 10. Config file
+    // 10. Config file with workspace type
     var config_dir: []const u8 = undefined;
     var config_dir_allocated = false;
     defer if (config_dir_allocated) allocator.free(config_dir);
 
-    if (global) {
+    if (workspace_type == .global) {
         switch (paths.getGlobalConfigPath(allocator)) {
             .ok => |p| {
                 config_dir = p;
@@ -1535,12 +1507,30 @@ pub fn run(
     // Ensure config dir exists
     try createDirTracked(allocator, config_dir, &result);
 
+    // Generate workspace-specific config
+    var workspace_name: []const u8 = undefined;
+    var workspace_name_allocated = false;
+    defer if (workspace_name_allocated) allocator.free(workspace_name);
+
+    if (base_path_allocated or !std.mem.eql(u8, base_path, ".")) {
+        workspace_name = std.fs.path.basename(base_path);
+    } else {
+        // Get real path for current directory
+        const real_path = try std.fs.cwd().realpathAlloc(allocator, ".");
+        defer allocator.free(real_path);
+        workspace_name = try allocator.dupe(u8, std.fs.path.basename(real_path));
+        workspace_name_allocated = true;
+    }
+
+    const config_content = try config.generateConfigToml(allocator, workspace_type, workspace_name, &.{});
+    defer allocator.free(config_content);
+
     const config_path = try paths.joinPath(allocator, &.{ config_dir, "ligi.toml" });
     defer allocator.free(config_path);
-    try createFileTracked(allocator, config_path, config.DEFAULT_CONFIG_TOML, &result);
+    try createFileTracked(allocator, config_path, config_content, &result);
 
     // Register repo in global index (only for local init, not --global)
-    if (!global) {
+    if (workspace_type != .global) {
         switch (global_index.registerRepo(allocator, base_path)) {
             .ok => {},
             .err => |e| {
@@ -1549,6 +1539,25 @@ pub fn run(
                 try e.context.format("", .{}, stderr);
                 try stderr.writeAll("\n");
             },
+        }
+    }
+
+    // Register with parent org (for repo workspaces, unless --no-register)
+    if (workspace_type == .repo and !no_register) {
+        // Try to find parent org and register with it
+        if (findParentOrg(allocator, base_path)) |org_path| {
+            defer allocator.free(org_path);
+
+            const org_config_path = try paths.joinPath(allocator, &.{ org_path, "art", "config", "ligi.toml" });
+            defer allocator.free(org_config_path);
+
+            config.addRepoToOrgConfig(allocator, org_config_path, workspace_name) catch |err| {
+                try stderr.print("warning: failed to register with parent org: {s}\n", .{@errorName(err)});
+            };
+
+            if (!quiet) {
+                try stdout.print("  registered with org: {s}\n", .{org_path});
+            }
         }
     }
 
@@ -1601,6 +1610,74 @@ fn createFileTracked(allocator: std.mem.Allocator, path: []const u8, content: []
             std.debug.print("Warning: {s}\n", .{e.context.message});
         },
     }
+}
+
+/// Find parent org by walking up from a path looking for art/ with type = "org"
+fn findParentOrg(allocator: std.mem.Allocator, start_path: []const u8) ?[]const u8 {
+    const max_depth = 10;
+
+    // Get the real path first
+    var current_path: []const u8 = undefined;
+    var current_allocated = false;
+    defer if (current_allocated) allocator.free(current_path);
+
+    if (std.mem.eql(u8, start_path, ".")) {
+        current_path = std.fs.cwd().realpathAlloc(allocator, ".") catch return null;
+        current_allocated = true;
+    } else {
+        current_path = allocator.dupe(u8, start_path) catch return null;
+        current_allocated = true;
+    }
+
+    var depth: usize = 0;
+    while (depth < max_depth) {
+        // Get parent directory
+        const parent = std.fs.path.dirname(current_path) orelse return null;
+        if (std.mem.eql(u8, parent, current_path)) return null; // Reached root
+
+        // Check if parent has art/ with type = "org"
+        const art_path = paths.joinPath(allocator, &.{ parent, "art" }) catch {
+            allocator.free(current_path);
+            current_path = allocator.dupe(u8, parent) catch return null;
+            depth += 1;
+            continue;
+        };
+        defer allocator.free(art_path);
+
+        if (fs.dirExists(art_path)) {
+            // Check config for org type
+            const config_path = paths.joinPath(allocator, &.{ art_path, "config", "ligi.toml" }) catch {
+                allocator.free(current_path);
+                current_path = allocator.dupe(u8, parent) catch return null;
+                depth += 1;
+                continue;
+            };
+            defer allocator.free(config_path);
+
+            const content = switch (fs.readFile(allocator, config_path)) {
+                .ok => |c| c,
+                .err => {
+                    allocator.free(current_path);
+                    current_path = allocator.dupe(u8, parent) catch return null;
+                    depth += 1;
+                    continue;
+                },
+            };
+            defer allocator.free(content);
+
+            // Simple check for type = "org"
+            if (std.mem.indexOf(u8, content, "type = \"org\"") != null) {
+                allocator.free(current_path);
+                return allocator.dupe(u8, parent) catch null;
+            }
+        }
+
+        allocator.free(current_path);
+        current_path = allocator.dupe(u8, parent) catch return null;
+        depth += 1;
+    }
+
+    return null;
 }
 
 // ============================================================================

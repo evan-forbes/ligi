@@ -7,6 +7,7 @@ const core = @import("../../core/mod.zig");
 const fs = core.fs;
 const paths = core.paths;
 const tag_index = core.tag_index;
+const workspace = core.workspace;
 const epoch = std.time.epoch;
 
 pub const PlanKind = enum {
@@ -31,6 +32,7 @@ pub const PlanOptions = struct {
     date_arg: ?[]const u8 = null,
     length: PlanLength = .long,
     inbox: ?bool = null,
+    dir_mode: bool = false,
     quiet: bool = false,
 };
 
@@ -113,21 +115,27 @@ pub fn run(
         }
     }
 
+    // Resolve art path via workspace detection
+    const art_path = try workspace.resolveArtPath(arena_alloc, null, stderr) orelse return 1;
+
     const target = try resolveTarget(
         arena_alloc,
         options.kind,
         options.length,
         options.name,
         use_inbox,
+        options.dir_mode,
         &time_tags,
     );
 
     const created = try ensurePlanDoc(
         arena_alloc,
+        art_path,
         target,
         options.kind,
         options.name,
         &time_tags,
+        options.dir_mode,
         options.quiet,
         stdout,
         stderr,
@@ -137,24 +145,25 @@ pub fn run(
 
     try updateCalendar(
         arena_alloc,
+        art_path,
         tags_to_add,
         options.quiet,
         stdout,
         stderr,
     );
 
+    // Build full output path for display
+    const full_output = try std.fs.path.join(arena_alloc, &.{ art_path, target.output_rel });
     if (!options.quiet and !created) {
-        try stdout.print("exists: {s}\n", .{target.output_rel});
+        try stdout.print("exists: {s}\n", .{full_output});
     }
 
     return 0;
 }
 
 fn defaultInbox(kind: PlanKind) bool {
-    return switch (kind) {
-        .feature, .chore, .refactor, .perf => true,
-        else => false,
-    };
+    _ = kind;
+    return true;
 }
 
 fn requiresName(kind: PlanKind) bool {
@@ -189,11 +198,15 @@ fn resolveTarget(
     length: PlanLength,
     name: ?[]const u8,
     use_inbox: bool,
+    dir_mode: bool,
     tags: *const TimeTags,
 ) !PlanTarget {
-    const template_rel = try templatePathForKind(kind, length);
+    const template_rel = templatePathForKind(kind, length);
 
-    const base_dir = if (use_inbox) "art/inbox" else "art/plan";
+    const base_dir = switch (kind) {
+        .day, .week, .month, .quarter => "calendar",
+        else => if (use_inbox) "inbox" else "plan",
+    };
     const kind_dir = switch (kind) {
         .day => "day",
         .week => "week",
@@ -216,36 +229,43 @@ fn resolveTarget(
         },
     };
 
-    const output_rel = try std.fs.path.join(allocator, &.{ base_dir, kind_dir, filename });
-    const output_rel_md = if (hasMarkdownExtension(output_rel))
-        output_rel
+    const output_rel_base = try std.fs.path.join(allocator, &.{ base_dir, kind_dir, filename });
+    const output_rel_md = if (dir_mode)
+        try std.fs.path.join(allocator, &.{ output_rel_base, "plan.md" })
+    else if (hasMarkdownExtension(output_rel_base))
+        output_rel_base
     else
-        try std.fmt.allocPrint(allocator, "{s}.md", .{output_rel});
+        try std.fmt.allocPrint(allocator, "{s}.md", .{output_rel_base});
 
-    const file_in_art = stripArtPrefix(output_rel_md);
-
+    // output_rel_md is now relative to art/ (e.g. "calendar/day/2026-02-03.md")
     return .{
         .template_rel = template_rel,
         .output_rel = output_rel_md,
-        .file_in_art = file_in_art,
+        .file_in_art = output_rel_md,
     };
 }
 
 fn ensurePlanDoc(
     allocator: std.mem.Allocator,
+    art_path: []const u8,
     target: PlanTarget,
     kind: PlanKind,
     name: ?[]const u8,
     tags: *const TimeTags,
+    dir_mode: bool,
     quiet: bool,
     stdout: anytype,
     stderr: anytype,
 ) !bool {
-    if (fs.fileExists(target.output_rel)) {
+    // Build full paths by joining art_path with relative paths
+    const full_output = try std.fs.path.join(allocator, &.{ art_path, target.output_rel });
+    const full_template = try std.fs.path.join(allocator, &.{ art_path, target.template_rel });
+
+    if (fs.fileExists(full_output)) {
         return false;
     }
 
-    const dir_path = std.fs.path.dirname(target.output_rel) orelse "art";
+    const dir_path = std.fs.path.dirname(full_output) orelse art_path;
     switch (fs.ensureDirRecursive(dir_path)) {
         .ok => {},
         .err => |e| {
@@ -254,11 +274,17 @@ fn ensurePlanDoc(
         },
     }
 
-    const rendered = try renderTemplate(allocator, target.template_rel, kind, name, tags, stderr);
+    const rendered = try renderTemplate(allocator, full_template, kind, name, tags, stderr);
 
-    const filled = try tag_index.fillTagLinks(allocator, rendered, target.file_in_art);
+    // Inject auto-tags based on workspace context
+    var with_auto_tags = try injectAutoTags(allocator, rendered);
+    if (dir_mode) {
+        with_auto_tags = try appendPlanLinksSection(allocator, with_auto_tags);
+    }
 
-    switch (fs.writeFile(target.output_rel, filled.content)) {
+    const filled = try tag_index.fillTagLinks(allocator, with_auto_tags, target.file_in_art);
+
+    switch (fs.writeFile(full_output, filled.content)) {
         .ok => {},
         .err => |e| {
             try e.write(stderr);
@@ -267,10 +293,83 @@ fn ensurePlanDoc(
     }
 
     if (!quiet) {
-        try stdout.print("created: {s}\n", .{target.output_rel});
+        try stdout.print("created: {s}\n", .{full_output});
     }
 
     return true;
+}
+
+fn appendPlanLinksSection(allocator: std.mem.Allocator, content: []const u8) ![]const u8 {
+    const suffix =
+        "\n\n## Links\n" ++
+        "<!-- Add links like: - [Item](item.md) -->\n";
+    return try std.fmt.allocPrint(allocator, "{s}{s}", .{ content, suffix });
+}
+
+/// Inject auto-tags (org and repo) into document content based on workspace context
+fn injectAutoTags(allocator: std.mem.Allocator, content: []const u8) ![]const u8 {
+    // Try to detect workspace context
+    const cwd = std.fs.cwd().realpathAlloc(allocator, ".") catch return content;
+    defer allocator.free(cwd);
+
+    const ws_result = core.workspace.detectWorkspace(allocator, cwd);
+    if (ws_result != .ok) {
+        return content;
+    }
+
+    var ctx = ws_result.ok;
+    defer ctx.deinit();
+
+    // Don't add auto-tags if disabled
+    if (!ctx.auto_tags_enabled) {
+        return content;
+    }
+
+    // Build auto-tags string
+    var auto_tags: std.ArrayList(u8) = .empty;
+    defer auto_tags.deinit(allocator);
+
+    // Add org tag if we have an org
+    if (ctx.org_name) |org_name| {
+        try auto_tags.appendSlice(allocator, " [[t/");
+        try auto_tags.appendSlice(allocator, org_name);
+        try auto_tags.appendSlice(allocator, "]]");
+    }
+
+    // Add repo tag (always, since we're in a workspace)
+    try auto_tags.appendSlice(allocator, " [[t/");
+    try auto_tags.appendSlice(allocator, ctx.name);
+    try auto_tags.appendSlice(allocator, "]]");
+
+    if (auto_tags.items.len == 0) {
+        return content;
+    }
+
+    // Find the first line with tags (starts with [[t/) and append to it
+    // Or find the first blank line after a heading and insert there
+    var result: std.ArrayList(u8) = .empty;
+    var lines = std.mem.splitScalar(u8, content, '\n');
+    var found_tag_line = false;
+
+    while (lines.next()) |line| {
+        try result.appendSlice(allocator, line);
+
+        // Check if this line has existing tags
+        if (!found_tag_line and std.mem.indexOf(u8, line, "[[t/") != null) {
+            // Append auto-tags to this line (before newline)
+            try result.appendSlice(allocator, auto_tags.items);
+            found_tag_line = true;
+        }
+
+        try result.append(allocator, '\n');
+    }
+
+    // Remove trailing newline if original didn't have one
+    if (content.len > 0 and content[content.len - 1] != '\n' and result.items.len > 0) {
+        _ = result.pop();
+    }
+
+    return result.toOwnedSlice(allocator);
 }
 
 fn renderTemplate(
@@ -281,17 +380,50 @@ fn renderTemplate(
     tags: *const TimeTags,
     stderr: anytype,
 ) ![]const u8 {
-    const abs_path = std.fs.cwd().realpathAlloc(allocator, template_path) catch |err| {
-        try stderr.print("error: plan: cannot resolve template '{s}': {}\n", .{ template_path, err });
-        return error.TemplateNotFound;
-    };
-    defer allocator.free(abs_path);
+    // Try to load template from filesystem first
+    var content: []const u8 = undefined;
+    var content_allocated = false;
+    var abs_path: []const u8 = undefined;
+    var abs_path_allocated = false;
 
-    const content = std.fs.cwd().readFileAlloc(allocator, abs_path, 1024 * 1024) catch |err| {
-        try stderr.print("error: plan: cannot read template '{s}': {}\n", .{ abs_path, err });
-        return error.TemplateNotFound;
-    };
-    defer allocator.free(content);
+    defer {
+        if (content_allocated) allocator.free(content);
+        if (abs_path_allocated) allocator.free(abs_path);
+    }
+
+    // First try the direct path
+    const resolve_result = std.fs.cwd().realpathAlloc(allocator, template_path);
+    if (resolve_result) |path| {
+        abs_path = path;
+        abs_path_allocated = true;
+        const read_result = std.fs.cwd().readFileAlloc(allocator, abs_path, 1024 * 1024);
+        if (read_result) |c| {
+            content = c;
+            content_allocated = true;
+        } else |_| {
+            // Try builtin fallback
+            const template_name = std.fs.path.basename(template_path);
+            if (core.getBuiltinTemplate(template_name)) |builtin| {
+                content = builtin;
+                content_allocated = false;
+            } else {
+                try stderr.print("error: plan: cannot read template '{s}'\n", .{abs_path});
+                return error.TemplateNotFound;
+            }
+        }
+    } else |_| {
+        // Path doesn't exist - try builtin fallback
+        const template_name = std.fs.path.basename(template_path);
+        if (core.getBuiltinTemplate(template_name)) |builtin| {
+            content = builtin;
+            content_allocated = false;
+            abs_path = "builtin";
+            abs_path_allocated = false;
+        } else {
+            try stderr.print("error: plan: cannot resolve template '{s}'\n", .{template_path});
+            return error.TemplateNotFound;
+        }
+    }
 
     var tmpl = template.parser.parse(allocator, content) catch |err| {
         const msg = switch (err) {
@@ -389,44 +521,15 @@ fn buildTemplateValues(
     return values;
 }
 
-fn stripArtPrefix(path: []const u8) []const u8 {
-    if (std.mem.startsWith(u8, path, "art/")) return path[4..];
-    if (std.mem.startsWith(u8, path, "art\\")) return path[4..];
-    return path;
-}
-
 fn calendarTagsForKind(
     allocator: std.mem.Allocator,
     kind: PlanKind,
     tags: *const TimeTags,
 ) ![]const []const u8 {
     var list = try std.ArrayList([]const u8).initCapacity(allocator, 0);
-    switch (kind) {
-        .day => {
-            try list.append(allocator, tags.day_tag);
-            try list.append(allocator, tags.week_tag);
-            try list.append(allocator, tags.month_tag);
-            try list.append(allocator, tags.quarter_tag);
-        },
-        .week => {
-            try list.append(allocator, tags.week_tag);
-            try list.append(allocator, tags.month_tag);
-            try list.append(allocator, tags.quarter_tag);
-        },
-        .month => {
-            try list.append(allocator, tags.month_tag);
-            try list.append(allocator, tags.quarter_tag);
-        },
-        .quarter => {
-            try list.append(allocator, tags.quarter_tag);
-        },
-        .feature, .chore, .refactor, .perf => {
-            try list.append(allocator, tags.day_tag);
-            try list.append(allocator, tags.week_tag);
-            try list.append(allocator, tags.month_tag);
-            try list.append(allocator, tags.quarter_tag);
-        },
-    }
+    _ = kind;
+    try list.append(allocator, tags.day_tag);
+    try list.append(allocator, tags.week_tag);
     return try list.toOwnedSlice(allocator);
 }
 
@@ -472,21 +575,42 @@ const TagBucket = struct {
 
 fn updateCalendar(
     allocator: std.mem.Allocator,
+    art_path: []const u8,
     tags_to_add: []const []const u8,
     quiet: bool,
     stdout: anytype,
     stderr: anytype,
 ) !void {
-    const art_path = try paths.getLocalArtPath(allocator, ".");
-    defer allocator.free(art_path);
+    const calendar_dir = try std.fs.path.join(allocator, &.{ art_path, "calendar" });
+    defer allocator.free(calendar_dir);
+    switch (fs.ensureDirRecursive(calendar_dir)) {
+        .ok => {},
+        .err => |e| {
+            try e.write(stderr);
+            return error.CalendarWriteFailed;
+        },
+    }
 
-    const calendar_path = try std.fs.path.join(allocator, &.{ art_path, "calendar.md" });
+    const calendar_path = try std.fs.path.join(allocator, &.{ calendar_dir, "index.md" });
     defer allocator.free(calendar_path);
+    const legacy_calendar_path = try std.fs.path.join(allocator, &.{ art_path, "calendar.md" });
+    defer allocator.free(legacy_calendar_path);
 
     var existing_content: []const u8 = "";
     var existing_allocated = false;
     if (fs.fileExists(calendar_path)) {
         existing_content = switch (fs.readFile(allocator, calendar_path)) {
+            .ok => |c| blk: {
+                existing_allocated = true;
+                break :blk c;
+            },
+            .err => |e| {
+                try e.write(stderr);
+                return error.CalendarReadFailed;
+            },
+        };
+    } else if (fs.fileExists(legacy_calendar_path)) {
+        existing_content = switch (fs.readFile(allocator, legacy_calendar_path)) {
             .ok => |c| blk: {
                 existing_allocated = true;
                 break :blk c;
@@ -502,34 +626,28 @@ fn updateCalendar(
     defer day_bucket.deinit();
     var week_bucket = TagBucket.init(allocator);
     defer week_bucket.deinit();
-    var month_bucket = TagBucket.init(allocator);
-    defer month_bucket.deinit();
-    var quarter_bucket = TagBucket.init(allocator);
-    defer quarter_bucket.deinit();
 
     if (existing_content.len > 0) {
         const tags = try tag_index.parseTagsFromContent(allocator, existing_content);
         defer tag_index.freeTags(allocator, tags);
 
         for (tags) |tag| {
-            try addTimeTag(&day_bucket, &week_bucket, &month_bucket, &quarter_bucket, tag.name);
+            try addTimeTag(&day_bucket, &week_bucket, tag.name);
         }
     }
 
     const index_tags = try tag_index.loadTagListFromIndex(allocator, art_path, stderr);
     defer tag_index.freeTagList(allocator, index_tags);
     for (index_tags) |tag_name| {
-        try addTimeTag(&day_bucket, &week_bucket, &month_bucket, &quarter_bucket, tag_name);
+        try addTimeTag(&day_bucket, &week_bucket, tag_name);
     }
 
     for (tags_to_add) |tag_name| {
-        try addTimeTag(&day_bucket, &week_bucket, &month_bucket, &quarter_bucket, tag_name);
+        try addTimeTag(&day_bucket, &week_bucket, tag_name);
     }
 
     day_bucket.sortDesc();
     week_bucket.sortDesc();
-    month_bucket.sortDesc();
-    quarter_bucket.sortDesc();
 
     var calendar: std.ArrayList(u8) = .empty;
     defer calendar.deinit(allocator);
@@ -541,10 +659,8 @@ fn updateCalendar(
 
     try renderCalendarSection(calendar.writer(allocator), "Days", &day_bucket);
     try renderCalendarSection(calendar.writer(allocator), "Weeks", &week_bucket);
-    try renderCalendarSection(calendar.writer(allocator), "Months", &month_bucket);
-    try renderCalendarSection(calendar.writer(allocator), "Quarters", &quarter_bucket);
 
-    const filled = try tag_index.fillTagLinks(allocator, calendar.items, "calendar.md");
+    const filled = try tag_index.fillTagLinks(allocator, calendar.items, "calendar/index.md");
 
     const existed = fs.fileExists(calendar_path);
     switch (fs.writeFile(calendar_path, filled.content)) {
@@ -575,45 +691,87 @@ fn renderCalendarSection(
     try writer.writeByte('\n');
 }
 
-fn templatePathForKind(kind: PlanKind, length: PlanLength) ![]const u8 {
+/// Get template filename (without path) for a plan kind
+fn templateFileNameForKind(kind: PlanKind, length: PlanLength) []const u8 {
     return switch (kind) {
         .day => switch (length) {
-            .long => "art/template/plan_day.md",
-            .short => "art/template/plan_day_short.md",
+            .long => "plan_day.md",
+            .short => "plan_day_short.md",
         },
         .week => switch (length) {
-            .long => "art/template/plan_week.md",
-            .short => "art/template/plan_week_short.md",
+            .long => "plan_week.md",
+            .short => "plan_week_short.md",
         },
         .month => switch (length) {
-            .long => "art/template/plan_month.md",
-            .short => "art/template/plan_month_short.md",
+            .long => "plan_month.md",
+            .short => "plan_month_short.md",
         },
         .quarter => switch (length) {
-            .long => "art/template/plan_quarter.md",
-            .short => "art/template/plan_quarter_short.md",
+            .long => "plan_quarter.md",
+            .short => "plan_quarter_short.md",
         },
         .feature => switch (length) {
-            .long => "art/template/plan_feature.md",
-            .short => "art/template/plan_feature_short.md",
+            .long => "plan_feature.md",
+            .short => "plan_feature_short.md",
         },
         .chore => switch (length) {
-            .long => "art/template/plan_chore.md",
-            .short => "art/template/plan_chore_short.md",
+            .long => "plan_chore.md",
+            .short => "plan_chore_short.md",
         },
         .refactor => switch (length) {
-            .long => "art/template/plan_refactor.md",
-            .short => "art/template/plan_refactor_short.md",
+            .long => "plan_refactor.md",
+            .short => "plan_refactor_short.md",
         },
         .perf => switch (length) {
-            .long => "art/template/plan_perf.md",
-            .short => "art/template/plan_perf_short.md",
+            .long => "plan_perf.md",
+            .short => "plan_perf_short.md",
+        },
+    };
+}
+
+/// Get template path relative to art/ directory
+fn templatePathForKind(kind: PlanKind, length: PlanLength) []const u8 {
+    return switch (kind) {
+        .day => switch (length) {
+            .long => "template/plan_day.md",
+            .short => "template/plan_day_short.md",
+        },
+        .week => switch (length) {
+            .long => "template/plan_week.md",
+            .short => "template/plan_week_short.md",
+        },
+        .month => switch (length) {
+            .long => "template/plan_month.md",
+            .short => "template/plan_month_short.md",
+        },
+        .quarter => switch (length) {
+            .long => "template/plan_quarter.md",
+            .short => "template/plan_quarter_short.md",
+        },
+        .feature => switch (length) {
+            .long => "template/plan_feature.md",
+            .short => "template/plan_feature_short.md",
+        },
+        .chore => switch (length) {
+            .long => "template/plan_chore.md",
+            .short => "template/plan_chore_short.md",
+        },
+        .refactor => switch (length) {
+            .long => "template/plan_refactor.md",
+            .short => "template/plan_refactor_short.md",
+        },
+        .perf => switch (length) {
+            .long => "template/plan_perf.md",
+            .short => "template/plan_perf_short.md",
         },
     };
 }
 
 fn normalizeItemName(allocator: std.mem.Allocator, name: []const u8) ![]const u8 {
-    const trimmed = std.mem.trim(u8, name, " \t\r\n");
+    var trimmed = std.mem.trim(u8, name, " \t\r\n");
+    if (trimmed.len > 3 and std.ascii.eqlIgnoreCase(trimmed[trimmed.len - 3 ..], ".md")) {
+        trimmed = trimmed[0 .. trimmed.len - 3];
+    }
     return try allocator.dupe(u8, trimmed);
 }
 
@@ -625,8 +783,6 @@ fn hasMarkdownExtension(path: []const u8) bool {
 fn addTimeTag(
     day_bucket: *TagBucket,
     week_bucket: *TagBucket,
-    month_bucket: *TagBucket,
-    quarter_bucket: *TagBucket,
     tag_name: []const u8,
 ) !void {
     if (std.mem.startsWith(u8, tag_name, "t/d/")) {
@@ -638,18 +794,6 @@ fn addTimeTag(
     if (std.mem.startsWith(u8, tag_name, "t/w/")) {
         if (keyFromWeek(tag_name[4..])) |key| {
             try week_bucket.add(tag_name, key);
-        }
-        return;
-    }
-    if (std.mem.startsWith(u8, tag_name, "t/m/")) {
-        if (keyFromMonth(tag_name[4..])) |key| {
-            try month_bucket.add(tag_name, key);
-        }
-        return;
-    }
-    if (std.mem.startsWith(u8, tag_name, "t/q/")) {
-        if (keyFromQuarter(tag_name[4..])) |key| {
-            try quarter_bucket.add(tag_name, key);
         }
         return;
     }
