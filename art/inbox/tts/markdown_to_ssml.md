@@ -747,7 +747,7 @@ Output should be valid SSML.
 ```markdown
 # Daily Plan — January 14, 2026
 
-[[t/planning]] [[t/t/d/26-01-14]]
+[[t/planning]](../../index/tags/planning.md) [[t/t/d/26-01-14]](../../index/tags/t/d/26-01-14.md)
 
 ## Today
 - Fix the login bug
