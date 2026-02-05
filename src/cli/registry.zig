@@ -285,6 +285,28 @@ pub const COMMANDS = [_]CommandDef{
         ,
     },
     .{
+        .canonical = "tag",
+        .names = &.{ "tag", "t" },
+        .description = "Add tags to files or directories",
+        .long_description =
+        \\Add tags to a markdown file or all markdown files in a directory.
+        \\
+        \\Tags are inserted as [[t/tag_name]] after the first heading.
+        \\Files that already have the tag are skipped.
+        \\Indexes are automatically updated after tagging.
+        \\
+        \\Usage:
+        \\  ligi t <file.md> <tag>           Add tag to a single file
+        \\  ligi t <directory> <tag>         Add tag to all .md files in directory
+        \\  ligi t <path> <tag1,tag2>        Add multiple tags (comma-separated)
+        \\
+        \\Examples:
+        \\  ligi t art/notes.md project
+        \\  ligi t art/inbox/ sprint-12
+        \\  ligi t art/plans/feature.md api,backend
+        ,
+    },
+    .{
         .canonical = "github",
         .names = &.{ "github", "gh" },
         .description = "Pull GitHub issues and PRs as local documents",
@@ -449,6 +471,14 @@ const WorkspaceParams = clap.parseParamsComptime(
     \\
 );
 
+/// Tag command options
+const TagParams = clap.parseParamsComptime(
+    \\-h, --help             Show this help message
+    \\-q, --quiet            Suppress non-error output
+    \\<str>...
+    \\
+);
+
 /// GitHub command options
 const GithubParams = clap.parseParamsComptime(
     \\-h, --help             Show this help message
@@ -552,6 +582,8 @@ pub fn run(
         return runGlobalizeCommand(allocator, remaining_args, stdout, stderr);
     } else if (std.mem.eql(u8, cmd.canonical, "workspace")) {
         return runWorkspaceCommand(allocator, remaining_args, stdout, stderr);
+    } else if (std.mem.eql(u8, cmd.canonical, "tag")) {
+        return runTagCommand(allocator, remaining_args, global_args.quiet != 0, stdout, stderr);
     } else if (std.mem.eql(u8, cmd.canonical, "github")) {
         return runGithubCommand(allocator, remaining_args, global_args.quiet != 0, stdout, stderr);
     }
@@ -1085,6 +1117,43 @@ fn runWorkspaceCommand(
         stdout,
         stderr,
     );
+}
+
+/// Run the tag command with clap parsing
+fn runTagCommand(
+    allocator: std.mem.Allocator,
+    args: []const []const u8,
+    global_quiet: bool,
+    stdout: anytype,
+    stderr: anytype,
+) !u8 {
+    var diag: clap.Diagnostic = .{};
+    var iter = clap.args.SliceIterator{ .args = args };
+
+    var res = clap.parseEx(clap.Help, &TagParams, clap.parsers.default, &iter, .{
+        .diagnostic = &diag,
+        .allocator = allocator,
+    }) catch |err| {
+        try diag.report(stderr, err);
+        return 1;
+    };
+    defer res.deinit();
+
+    if (res.args.help != 0) {
+        const registry = buildRegistry();
+        if (registry.findCommand("tag")) |cmd| {
+            try registry.printCommandHelp(cmd, stdout);
+        }
+        return 0;
+    }
+
+    const positionals = res.positionals[0];
+    const path: ?[]const u8 = if (positionals.len > 0) positionals[0] else null;
+    const tags: ?[]const u8 = if (positionals.len > 1) positionals[1] else null;
+    const quiet = (res.args.quiet != 0) or global_quiet;
+
+    const tag_cmd = @import("commands/tag.zig");
+    return tag_cmd.run(allocator, path, tags, quiet, stdout, stderr);
 }
 
 /// Run the github command with clap parsing

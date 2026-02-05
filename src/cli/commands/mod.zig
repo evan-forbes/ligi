@@ -12,4 +12,5 @@ pub const globalize = @import("globalize.zig");
 pub const voice = @import("voice.zig");
 pub const lsp = @import("lsp.zig");
 pub const plan = @import("plan.zig");
+pub const tag = @import("tag.zig");
 pub const github = @import("github.zig");
