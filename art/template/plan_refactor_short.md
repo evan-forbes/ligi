@@ -15,7 +15,7 @@ week_tag = { type = "string" }
 
 Date: {{ date_long }}
 
-[[t/planning]] [[t/refactor]] [[t/{{ day_tag }}]] [[t/{{ week_tag }}]]
+[[t/planning]](../index/tags/planning.md) [[t/refactor]](../index/tags/refactor.md) [[t/{{ day_tag }}]] [[t/{{ week_tag }}]]
 
 ## Strategy
 -

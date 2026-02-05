@@ -15,7 +15,7 @@ week_tag = { type = "string" }
 
 Date: {{ date_long }}
 
-[[t/planning]] [[t/feature]] [[t/{{ day_tag }}]] [[t/{{ week_tag }}]]
+[[t/planning]](../index/tags/planning.md) [[t/feature]](../index/tags/feature.md) [[t/{{ day_tag }}]] [[t/{{ week_tag }}]]
 
 ## Summary
 -

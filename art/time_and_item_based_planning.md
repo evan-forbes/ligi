@@ -1,4 +1,4 @@
-[[t/planning]] [[t/cli]] [[t/plan]] [[t/init]] [[t/tagging]]
+[[t/planning]](index/tags/planning.md) [[t/cli]](index/tags/cli.md) [[t/plan]](index/tags/plan.md) [[t/init]](index/tags/init.md) [[t/tagging]](index/tags/tagging.md)
 
 # Time and Item Based Planning
 

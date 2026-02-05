@@ -12,7 +12,7 @@ week_tag = { type = "string" }
 
 # Monthly Plan — {{ month }}
 
-[[t/planning]] [[t/{{ day_tag }}]] [[t/{{ week_tag }}]]
+[[t/planning]](../index/tags/planning.md) [[t/{{ day_tag }}]] [[t/{{ week_tag }}]]
 
 ## Review (required)
 - Review open work: `ligi q t TODO | planning`

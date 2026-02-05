@@ -13,7 +13,7 @@ prev_week_tag = { type = "string" }
 
 # Weekly Plan - {{ week }}
 
-[[t/planning]] [[t/{{ day_tag }}]] [[t/{{ week_tag }}]]
+[[t/planning]](../index/tags/planning.md) [[t/{{ day_tag }}]] [[t/{{ week_tag }}]]
 
 ## Review
 - Last week: [[t/{{ prev_week_tag }}]]

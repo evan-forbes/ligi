@@ -11,6 +11,6 @@ other_doc_path = { type = "string" }
 
 # Document
 
-[[t/extension]]
+[[t/extension]](../index/tags/extension.md)
 
 [{{ other_doc_path }}]({{ other_doc_path }})
