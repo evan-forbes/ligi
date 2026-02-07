@@ -10,6 +10,14 @@
     // DOM elements
     const fileListEl = document.getElementById('file-list');
     const contentEl = document.getElementById('content');
+    const query = new URLSearchParams(window.location.search);
+    const printMode = query.get('print') === '1';
+    const initialPathQuery = query.get('path');
+
+    if (printMode) {
+        document.body.classList.add('print-mode');
+        document.body.setAttribute('data-render-ready', '0');
+    }
 
     // Utility: escape HTML (defined early for use in marked extension)
     function escapeHtml(text) {
@@ -134,7 +142,7 @@
     // Initialize mermaid
     mermaid.initialize({
         startOnLoad: false,
-        theme: 'dark',
+        theme: printMode ? 'default' : 'dark',
         securityLevel: 'loose',
         fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace'
     });
@@ -299,6 +307,18 @@
         });
     }
 
+    function markRenderPending() {
+        if (printMode) {
+            document.body.setAttribute('data-render-ready', '0');
+        }
+    }
+
+    function markRenderReady() {
+        if (printMode) {
+            document.body.setAttribute('data-render-ready', '1');
+        }
+    }
+
     // Load file list from API
     async function loadFileList() {
         try {
@@ -336,6 +356,7 @@
     // Load and render a markdown file
     async function loadFile(path, anchor) {
         currentFile = path;
+        markRenderPending();
 
         // Update active state in sidebar
         fileListEl.querySelectorAll('.file-item').forEach(item => {
@@ -349,12 +370,14 @@
             const response = await fetch('/api/file?path=' + encodeURIComponent(path));
             if (!response.ok) throw new Error('Failed to load file');
             const markdown = await response.text();
-            renderMarkdown(markdown);
+            await renderMarkdown(markdown);
             if (anchor) {
                 scrollToAnchor(anchor);
             }
+            markRenderReady();
         } catch (err) {
             contentEl.innerHTML = '<div class="error-message">Failed to load file: ' + escapeHtml(err.message) + '</div>';
+            markRenderReady();
         }
 
         // Update URL hash
@@ -362,7 +385,7 @@
     }
 
     // Render markdown content
-    function renderMarkdown(markdown) {
+    async function renderMarkdown(markdown) {
         // Parse and render markdown
         contentEl.innerHTML = marked.parse(markdown);
         rewriteContentLinks();
@@ -371,7 +394,7 @@
         highlightCodeBlocks();
 
         // Process mermaid diagrams
-        renderMermaid();
+        await renderMermaid();
 
         // Scroll to top
         contentEl.scrollTop = 0;
@@ -425,6 +448,15 @@
     // Initialize
     async function init() {
         await loadFileList();
+
+        if (initialPathQuery) {
+            const initialPath = safeDecode(initialPathQuery);
+            const resolved = resolveMarkdownPath(initialPath);
+            if (resolved) {
+                loadFile(resolved);
+                return;
+            }
+        }
 
         // Check for initial hash
         if (window.location.hash) {

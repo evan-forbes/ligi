@@ -394,7 +394,7 @@ pub fn build(b: *std.Build) void {
     // Integration tests
     const integration_tests = b.addTest(.{
         .root_module = b.createModule(.{
-            .root_source_file = b.path("src/testing/integration/serve.zig"),
+            .root_source_file = b.path("src/testing/integration/mod.zig"),
             .target = target,
             .optimize = optimize,
         }),

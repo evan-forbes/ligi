@@ -232,6 +232,20 @@ pub const COMMANDS = [_]CommandDef{
         ,
     },
     .{
+        .canonical = "pdf",
+        .names = &.{"pdf"},
+        .description = "Render markdown to PDF with Chromium headless",
+        .long_description =
+        \\Render markdown files to PDF using ligi's renderer plus headless Chromium.
+        \\
+        \\Usage: ligi pdf <input.md> [-o <output.pdf>] [-r]
+        \\
+        \\Options:
+        \\  -o, --output <path>   Output PDF path (default: <input>.pdf)
+        \\  -r, --recursive       Recursively merge linked markdown into one PDF
+        ,
+    },
+    .{
         .canonical = "lsp",
         .names = &.{"lsp"},
         .description = "Run LSP server for editor completions",
@@ -439,6 +453,15 @@ const ServeParams = clap.parseParamsComptime(
     \\
 );
 
+/// PDF command options
+const PdfParams = clap.parseParamsComptime(
+    \\-h, --help            Show this help message
+    \\-o, --output <str>    Output PDF path (default: <input>.pdf)
+    \\-r, --recursive       Recursively merge linked markdown into one PDF
+    \\<str>...
+    \\
+);
+
 /// LSP command options
 const LspParams = clap.parseParamsComptime(
     \\-h, --help           Show this help message
@@ -576,6 +599,8 @@ pub fn run(
         return runVoiceCommand(allocator, remaining_args, stdout, stderr);
     } else if (std.mem.eql(u8, cmd.canonical, "serve")) {
         return runServeCommand(allocator, remaining_args, stdout, stderr);
+    } else if (std.mem.eql(u8, cmd.canonical, "pdf")) {
+        return runPdfCommand(allocator, remaining_args, stdout, stderr);
     } else if (std.mem.eql(u8, cmd.canonical, "lsp")) {
         return runLspCommand(allocator, remaining_args, stdout, stderr);
     } else if (std.mem.eql(u8, cmd.canonical, "globalize")) {
@@ -1009,6 +1034,51 @@ fn runServeCommand(
     );
 }
 
+/// Run the pdf command with clap parsing
+fn runPdfCommand(
+    allocator: std.mem.Allocator,
+    args: []const []const u8,
+    stdout: anytype,
+    stderr: anytype,
+) !u8 {
+    var diag: clap.Diagnostic = .{};
+    var iter = clap.args.SliceIterator{ .args = args };
+
+    var res = clap.parseEx(clap.Help, &PdfParams, clap.parsers.default, &iter, .{
+        .diagnostic = &diag,
+        .allocator = allocator,
+    }) catch |err| {
+        try diag.report(stderr, err);
+        return 1;
+    };
+    defer res.deinit();
+
+    if (res.args.help != 0) {
+        const registry = buildRegistry();
+        if (registry.findCommand("pdf")) |cmd| {
+            try registry.printCommandHelp(cmd, stdout);
+        }
+        return 0;
+    }
+
+    const positionals = res.positionals[0];
+    const input_path: ?[]const u8 = if (positionals.len > 0) positionals[0] else null;
+    if (positionals.len > 1) {
+        try stderr.writeAll("error: pdf: expected exactly one input markdown file\n");
+        return 1;
+    }
+
+    const pdf_cmd = @import("commands/pdf.zig");
+    return pdf_cmd.run(
+        allocator,
+        input_path,
+        res.args.output,
+        res.args.recursive != 0,
+        stdout,
+        stderr,
+    );
+}
+
 /// Run the lsp command with clap parsing
 fn runLspCommand(
     allocator: std.mem.Allocator,
@@ -1252,6 +1322,7 @@ test "printHelp includes all commands" {
     try std.testing.expect(std.mem.indexOf(u8, output, "check") != null);
     try std.testing.expect(std.mem.indexOf(u8, output, "backup") != null);
     try std.testing.expect(std.mem.indexOf(u8, output, "serve") != null);
+    try std.testing.expect(std.mem.indexOf(u8, output, "pdf") != null);
     try std.testing.expect(std.mem.indexOf(u8, output, "lsp") != null);
     try std.testing.expect(std.mem.indexOf(u8, output, "globalize") != null);
     try std.testing.expect(std.mem.indexOf(u8, output, "github") != null);
@@ -1311,6 +1382,11 @@ test "QueryParams are valid" {
 test "ServeParams are valid" {
     // Verify serve params compile correctly
     _ = ServeParams;
+}
+
+test "PdfParams are valid" {
+    // Verify pdf params compile correctly
+    _ = PdfParams;
 }
 
 test "LspParams are valid" {

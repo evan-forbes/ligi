@@ -25,6 +25,13 @@ sudo apt install libasound2-dev
 make voice
 ```
 
+Optional PDF support (Chromium/Chrome required at runtime):
+
+```bash
+make pdf-check          # verify browser dependency
+make pdf-deps           # attempt install
+```
+
 ## Quick Start
 
 ```bash
@@ -166,6 +173,20 @@ ligi serve                     # serve ./art on :8777
 ligi serve -p 3000             # custom port
 ligi serve -r ./docs           # serve different directory
 ```
+
+### `ligi pdf`
+
+Render markdown to PDF using ligi's markdown renderer plus headless Chromium/Chrome.
+
+```bash
+ligi pdf art/spec.md                    # writes art/spec.pdf
+ligi pdf art/spec.md -o /tmp/spec.pdf   # custom output path
+ligi pdf art/spec.md -r                 # recursively merge linked markdown to one PDF
+```
+
+Notes:
+- Chromium/Chrome is not embedded in `ligi`; it is invoked only for `ligi pdf`.
+- Set `LIGI_PDF_BROWSER=/path/to/chromium` to override browser discovery.
 
 ### `ligi backup`
 

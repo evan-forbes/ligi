@@ -311,6 +311,91 @@ html, body {
     margin-bottom: 16px;
 }
 
+/* Print/PDF mode */
+body.print-mode {
+    background: #fff;
+    color: #111;
+}
+
+body.print-mode .container {
+    display: block;
+    height: auto;
+}
+
+body.print-mode .sidebar {
+    display: none;
+}
+
+body.print-mode .content {
+    padding: 0;
+    overflow: visible;
+}
+
+body.print-mode .markdown-body {
+    max-width: none;
+    color: #111;
+}
+
+body.print-mode .markdown-body h1,
+body.print-mode .markdown-body h2,
+body.print-mode .markdown-body h3,
+body.print-mode .markdown-body h4,
+body.print-mode .markdown-body h5,
+body.print-mode .markdown-body h6,
+body.print-mode .markdown-body p,
+body.print-mode .markdown-body li,
+body.print-mode .markdown-body code,
+body.print-mode .markdown-body pre {
+    color: #111;
+}
+
+body.print-mode .markdown-body pre,
+body.print-mode .markdown-body code {
+    background: #f6f8fa;
+    border-color: #d0d7de;
+}
+
+body.print-mode .markdown-body table th,
+body.print-mode .markdown-body table td {
+    border-color: #d0d7de;
+}
+
+body.print-mode .markdown-body table tr,
+body.print-mode .markdown-body table tr:nth-child(2n) {
+    background: #fff;
+}
+
+body.print-mode .mermaid {
+    background: #fff;
+    border-color: #d0d7de;
+}
+
+@media print {
+    body {
+        background: #fff;
+        color: #111;
+    }
+
+    .container {
+        display: block;
+        height: auto;
+    }
+
+    .sidebar {
+        display: none !important;
+    }
+
+    .content {
+        padding: 0;
+        overflow: visible;
+    }
+
+    .markdown-body {
+        max-width: none;
+        color: #111;
+    }
+}
+
 /* Responsive */
 @media (max-width: 768px) {
     .sidebar {
