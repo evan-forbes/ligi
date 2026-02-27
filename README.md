@@ -2,9 +2,9 @@
 
 > pronounced LEE-ghee, ligi is Esperanto for the verb "to link, connect, or tie"
 
-Ligi is an opinionated, minimal Obsidian-like system written in Zig. It is CLI-first, expects you to keep using your existing text editor, and is built for humans to effectively generate code via LLMs, instead of "vibe coding". This is done via first generating and reviewing planning documents such as specs, ADRs, and implementation plans before proceeding with the actual generation of the code.
+Ligi is an opinionated, minimal Obsidian-like system written in Zig. It is CLI-first, expects you to keep using your existing text editor.
 
-Notes are itemized markdown artifacts that can span many repos and projects. There is a global view in `~/.ligi` that aggregates registered repos, and you can also keep smaller scoped views for a company or team by initializing Ligi in a separate workspace. Voice input is built in via whisper.cpp, with Vulkan acceleration when available.
+Notes are itemized markdown artifacts that can span many repos and projects. There is a global view in `~/.ligi` that aggregates registered repos.
 
 ## Why
 
@@ -59,7 +59,6 @@ repo/
 │   ├── index/
 │   │   ├── ligi_tags.md      # master tag index
 │   │   └── tags/             # per-tag indexes
-│   ├── template/             # prompt and report templates
 │   ├── config/
 │   │   └── ligi.toml
 │   └── archive/              # soft-deleted docs
@@ -100,42 +99,6 @@ ligi q t sprint-12 & backend   # AND
 ligi q t bug | urgent          # OR
 ligi q t planning -o json      # JSON output
 ligi q t planning -c           # copy to clipboard
-```
-
-### `ligi check`
-
-Validates the global index. It can also prune broken entries.
-
-Output:
-```
-/path/to/repo1 OK
-/path/to/repo2 BROKEN
-/path/to/repo3 MISSING_ART
-```
-
-### `ligi template fill` / `ligi t f`
-
-Fill TOML frontmatter templates interactively.
-
-```bash
-ligi t f art/template/standup.md    # fill specific template
-ligi t f                            # fzf picker
-ligi t f template.md -c             # copy result to clipboard
-```
-
-Template format:
-```markdown
-# front
-
-```toml
-author = { type = "string", default = "anon" }
-count = { type = "int", default = 0 }
-```
-
-# Report
-
-Author: {{ author }}
-Items completed: {{ count }}
 ```
 
 ### `ligi plan` / `ligi p`
@@ -246,7 +209,3 @@ LLM context: point agents at `art/` for project context. The markdown is self-de
 - Index files are human-readable markdown
 - Safe by default with path traversal protection
 - No network dependencies for core functionality
-
-## License
-
-MIT
